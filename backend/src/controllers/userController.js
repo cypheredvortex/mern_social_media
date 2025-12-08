@@ -91,3 +91,30 @@ export async function delete_user(req, res) {
     res.status(500).json({ message: "Internal server error!" });
   }
 }
+
+export async function login_user(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password!" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid email or password!" });
+    }
+
+    const userWithoutPassword = user.toObject();
+    delete userWithoutPassword.password;
+
+    res.status(200).json({
+      message: "Login successful!",
+      user: userWithoutPassword,
+    });
+  } catch (error) {
+    console.error("Error in login_user controller:", error);
+    res.status(500).json({ message: "Internal server error!" });
+  }
+}

@@ -6,31 +6,57 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
+  // Optional: fetch current user on load (if using token in localStorage)
   useEffect(() => {
-    // Optional: Fetch current user on load if token exists
-    const fetchUser = async () => {
-      try {
-        const res = await api.get("/users/me");
-        setUser(res.data);
-      } catch (err) {
-        setUser(null);
-      }
-    };
-    fetchUser();
+    const token = localStorage.getItem("token");
+    if (token) {
+      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      fetchCurrentUser();
+    }
   }, []);
 
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await api.get("/users/me"); // you can implement this route if needed
+      setUser(res.data);
+    } catch (err) {
+      console.error("Error fetching user:", err);
+      logout();
+    }
+  };
+
+  // Login
   const login = async (email, password) => {
     const res = await api.post("/users/login", { email, password });
-    setUser(res.data);
+    const userData = res.data.user; // backend returns { message, user }
+
+    setUser(userData);
+
+    return userData; // return user for redirect logic
+  };
+
+  // Register (calls create_user)
+  const register = async (username, email, password) => {
+    const res = await api.post("/users", {
+      username,
+      email,
+      password,
+      role: "user", // ensure default role
+    });
+
+    const userData = res.data;
+    setUser(userData); // auto-login after registration
+    return userData;
   };
 
   const logout = () => {
     setUser(null);
-    // Optional: clear token/localStorage
+    localStorage.removeItem("token");
+    delete api.defaults.headers.common["Authorization"];
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );

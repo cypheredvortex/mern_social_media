@@ -44,7 +44,7 @@ app.use("/api/reports",reportRoutes);
 app.use("/api/search-histories",searchHistoryRoutes);
 app.use("/api/shares",shareRoutes);
 app.use("/api/users",userRoutes);
-app.use("/api/user-settings",userSettingsRoutes);
+app.use("/api/userSettings",userSettingsRoutes);
 
 connectDB().then(()=>{
     app.listen(PORT,()=>{

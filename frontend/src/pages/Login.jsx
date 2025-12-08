@@ -8,17 +8,28 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
-      await login(email, password);
+      const loggedUser = await login(email, password);
       toast.success("Logged in successfully!");
-      navigate("/");
+      
+      // Redirect based on role
+      if (loggedUser.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/"); 
+      }
     } catch (err) {
-      toast.error(err);
+      toast.error(err.response?.data?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
   };
+
 
   return (
     <div className="flex justify-center items-center h-screen bg-gray-100">
@@ -45,9 +56,12 @@ const Login = () => {
         />
         <button
           type="submit"
-          className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+          className={`w-full p-2 rounded text-white ${
+            loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"
+          }`}
+          disabled={loading}
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
         <p className="mt-4 text-center">
           Don't have an account?{" "}
