@@ -15,6 +15,7 @@ import userRoutes from "./routes/userRoutes.js"
 import userSettingsRoutes from "./routes/userSettingsRoutes.js"
 import { connectDB } from "./config/db.js"
 import dotenv from "dotenv"
+import cors from "cors"
 
 dotenv.config();
 
@@ -22,7 +23,9 @@ const app=express();
 const PORT=process.env.PORT;
 
 app.use(express.json());
-
+app.use(cors({
+    origin: "http://localhost:5173",
+}));
 app.use((req,res,next)=>{
     console.log(`${req.method} ${req.url}`);
     next();
