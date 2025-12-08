@@ -118,3 +118,34 @@ export async function login_user(req, res) {
     res.status(500).json({ message: "Internal server error!" });
   }
 }
+
+export async function search_user(req, res) {
+  try {
+    const { q } = req.query; 
+
+    if (!q || q.trim() === "") {
+      return res.status(400).json({ message: "Search query is required!" });
+    }
+
+    const searchRegex = new RegExp(q, "i");
+
+    const users = await User.find({
+      $or: [
+        { username: searchRegex },
+        { email: searchRegex },
+        { role: searchRegex },
+      ],
+    })
+      .select("-password")
+      .sort({ createdAt: -1 });
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: "No users found!" });
+    }
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error in search_user controller:", error);
+    res.status(500).json({ message: "Internal server error!" });
+  }
+}

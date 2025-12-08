@@ -1,5 +1,5 @@
 import express from "express"
-import {create_user, list_user, get_user_by_id, update_user, delete_user, login_user} from "../controllers/userController.js"
+import {create_user, list_user, get_user_by_id, update_user, delete_user, login_user, search_user} from "../controllers/userController.js"
 
 const router=express.Router();
 
@@ -9,5 +9,6 @@ router.post("/",create_user);
 router.put("/:id",update_user);
 router.delete("/:id",delete_user);
 router.post("/login",login_user);
+router.get("/search/:query",search_user);
 
 export default router;
