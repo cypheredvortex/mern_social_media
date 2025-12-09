@@ -2,10 +2,10 @@ import ActivityLog from "../models/ActivityLog.js";
 
 export async function list_activityLog(req, res) {
   try {
-    const logs = await ActivityLog.find()
-      .populate("user_id", "username profile_picture") // optional, populate user info
-      .sort({ createdAt: -1 });
-    res.status(200).json(logs);
+    const activityLogs = await ActivityLog.find()
+      .populate('user_id', 'username email') // Populate user info
+      .sort({ createdAt: -1 }); // Sort by latest first
+    res.json(activityLogs);
   } catch (error) {
     console.error("Error in list_activityLog controller:", error);
     res.status(500).json({ message: "Internal server error!" });

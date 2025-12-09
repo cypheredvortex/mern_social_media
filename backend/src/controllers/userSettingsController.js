@@ -55,6 +55,7 @@ export async function create_userSettings(req, res) {
   }
 }
 
+
 export async function update_userSettings(req, res) {
   try {
     const { dark_mode, language, notifications_enabled, privacy_visibility } = req.body;

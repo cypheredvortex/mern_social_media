@@ -12,7 +12,7 @@ export async function list_post(req,res){
 
 export async function get_post_by_id(req,res){
     try{
-        const post=await Post.findById(req.params.id);
+        const post = await Post.find().populate('author_id', 'username email').sort({ createdAt: -1 });res.json(posts);
         if(!post){
             return res.status(404).json({message:"Post not found!"});
         }

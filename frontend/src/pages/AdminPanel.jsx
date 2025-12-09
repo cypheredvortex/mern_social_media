@@ -16,13 +16,15 @@ const AdminPanel = () => {
 
   // Users State
   const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [userFilter, setUserFilter] = useState("all");
   const [userSearch, setUserSearch] = useState("");
 
   // Reports State
   const [reports, setReports] = useState([]);
-  const [reportFilter, setReportFilter] = useState("pending");
-  const [reportSearch, setReportSearch] = useState("");
+  const [filteredReports, setFilteredReports] = useState([]);
+  const [reportFilter, setReportFilter] = useState("all");
+  const [reportTypeFilter, setReportTypeFilter] = useState("all");
 
   // Content State
   const [posts, setPosts] = useState([]);
@@ -42,9 +44,17 @@ const AdminPanel = () => {
   const [showBanModal, setShowBanModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // Activity Logs
-  const [activityLogs, setActivityLogs] = useState([]);
-  const [selectedUserActivity, setSelectedUserActivity] = useState([]);
+  // Form States
+  const [banReason, setBanReason] = useState("");
+  const [banDuration, setBanDuration] = useState("7");
+
+  // Add axios interceptor for authentication
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+  }, []);
 
   // Fetch Dashboard Stats
   const fetchDashboardStats = async () => {
@@ -52,200 +62,299 @@ const AdminPanel = () => {
       setLoading(true);
       
       // Fetch all data in parallel
-      const [
-        usersRes,
-        postsRes,
-        reportsRes,
-        activityRes
-      ] = await Promise.all([
+      const [usersRes, postsRes, reportsRes, activityRes] = await Promise.all([
         api.get("/users"),
         api.get("/posts"),
         api.get("/reports"),
-        api.get("/activity-logs?limit=10")
+        api.get("/activity-logs")
       ]);
 
-      const totalUsers = usersRes.data.length;
-      const activeUsers = usersRes.data.filter(u => u.status === "active").length;
-      const suspendedUsers = usersRes.data.filter(u => u.status === "suspended").length;
-      const pendingReports = reportsRes.data.filter(r => r.status === "pending").length;
+      const usersData = usersRes.data;
+      const postsData = postsRes.data;
+      const reportsData = reportsRes.data;
+      const activityData = activityRes.data;
+
+      const totalUsers = usersData.length;
+      const activeUsers = usersData.filter(u => u.status === "active").length;
+      const suspendedUsers = usersData.filter(u => u.status === "suspended").length;
+      const pendingReports = reportsData.filter(r => r.status === "pending").length;
 
       setStats({
         totalUsers,
-        totalPosts: postsRes.data.length,
-        totalReports: reportsRes.data.length,
+        totalPosts: postsData.length,
+        totalReports: reportsData.length,
         pendingReports,
         activeUsers,
         suspendedUsers,
-        recentActivity: activityRes.data.slice(0, 5)
+        recentActivity: activityData.slice(0, 5).map(activity => ({
+          ...activity,
+          user_id: activity.user_id?._id || activity.user_id
+        }))
       });
 
-      setUsers(usersRes.data);
-      setPosts(postsRes.data);
-      setReports(reportsRes.data);
-      setActivityLogs(activityRes.data);
+      setUsers(usersData);
+      setFilteredUsers(usersData);
+      setPosts(postsData);
+      setReports(reportsData);
+      setFilteredReports(reportsData);
+
+      // Fetch comments
+      const commentsRes = await api.get("/comments");
+      setComments(commentsRes.data);
 
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
+      alert("Error fetching data. Please check your connection.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch User Details
+  // Fetch User Details with all related data
   const fetchUserDetails = async (userId) => {
     try {
       setLoading(true);
-      const [userRes, profileRes, userPostsRes, userCommentsRes, userReportsRes, userActivityRes] = await Promise.all([
-        api.get(`/users/${userId}`),
-        api.get(`/profiles?user_id=${userId}`),
-        api.get(`/posts?author_id=${userId}`),
-        api.get(`/comments?author_id=${userId}`),
-        api.get(`/reports?target_id=${userId}`),
-        api.get(`/activity-logs?user_id=${userId}&limit=20`)
-      ]);
+      
+      // Fetch user data
+      const userRes = await api.get(`/users/${userId}`);
+      const user = userRes.data;
+      
+      // Fetch profile data
+      let profile = {};
+      try {
+        const profileRes = await api.get(`/profiles`);
+        const userProfile = profileRes.data.find(p => p.user_id === userId);
+        if (userProfile) {
+          profile = userProfile;
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      }
+
+      // Fetch user's posts
+      let userPosts = [];
+      try {
+        const postsRes = await api.get("/posts");
+        userPosts = postsRes.data.filter(post => post.author_id === userId);
+      } catch (error) {
+        console.error("Error fetching user posts:", error);
+      }
+
+      // Fetch user's comments
+      let userComments = [];
+      try {
+        const commentsRes = await api.get("/comments");
+        userComments = commentsRes.data.filter(comment => comment.author_id === userId);
+      } catch (error) {
+        console.error("Error fetching user comments:", error);
+      }
+
+      // Fetch reports against this user
+      let userReports = [];
+      try {
+        const reportsRes = await api.get("/reports");
+        userReports = reportsRes.data.filter(report => 
+          (report.target_type === "user" && report.target_id === userId) ||
+          (report.target_type === "post" && userPosts.some(post => post._id === report.target_id)) ||
+          (report.target_type === "comment" && userComments.some(comment => comment._id === report.target_id))
+        );
+      } catch (error) {
+        console.error("Error fetching user reports:", error);
+      }
+
+      // Fetch user's activity
+      let userActivity = [];
+      try {
+        const activityRes = await api.get("/activity-logs");
+        userActivity = activityRes.data.filter(activity => activity.user_id === userId);
+      } catch (error) {
+        console.error("Error fetching user activity:", error);
+      }
 
       setSelectedUser({
-        ...userRes.data,
-        profile: profileRes.data[0] || {},
-        posts: userPostsRes.data || [],
-        comments: userCommentsRes.data || [],
-        reports: userReportsRes.data || [],
-        activity: userActivityRes.data || []
+        ...user,
+        profile,
+        posts: userPosts,
+        comments: userComments,
+        reports: userReports,
+        activity: userActivity.slice(0, 10) // Show last 10 activities
       });
 
       setShowUserModal(true);
     } catch (error) {
       console.error("Error fetching user details:", error);
+      alert("Error fetching user details");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch Report Details
+  // Fetch Report Details with all related data
   const fetchReportDetails = async (reportId) => {
     try {
       setLoading(true);
+      
+      // Fetch report data
       const reportRes = await api.get(`/reports/${reportId}`);
       const report = reportRes.data;
 
-      // Fetch reporter details
-      const [reporterRes, reporterProfileRes] = await Promise.all([
-        api.get(`/users/${report.reporter_id}`),
-        api.get(`/profiles?user_id=${report.reporter_id}`)
-      ]);
+      // Fetch reporter info
+      let reporter = {};
+      let reporterProfile = {};
+      try {
+        const reporterRes = await api.get(`/users/${report.reporter_id}`);
+        reporter = reporterRes.data;
+        
+        // Try to get reporter profile
+        const profilesRes = await api.get("/profiles");
+        const foundProfile = profilesRes.data.find(p => p.user_id === report.reporter_id);
+        if (foundProfile) {
+          reporterProfile = foundProfile;
+        }
+      } catch (error) {
+        console.error("Error fetching reporter:", error);
+      }
 
-      // Fetch target details based on type
-      let targetDetails = null;
-      if (report.target_type === "post") {
-        const [postRes, postAuthorRes] = await Promise.all([
-          api.get(`/posts/${report.target_id}`),
-          api.get(`/users/${report.target_id}`).catch(() => null)
-        ]);
-        targetDetails = {
-          type: "post",
-          data: postRes.data,
-          author: postAuthorRes?.data
-        };
-      } else if (report.target_type === "comment") {
-        const [commentRes, commentAuthorRes] = await Promise.all([
-          api.get(`/comments/${report.target_id}`),
-          api.get(`/users/${report.target_id}`).catch(() => null)
-        ]);
-        targetDetails = {
-          type: "comment",
-          data: commentRes.data,
-          author: commentAuthorRes?.data
-        };
-      } else if (report.target_type === "user") {
-        const [userRes, userProfileRes] = await Promise.all([
-          api.get(`/users/${report.target_id}`),
-          api.get(`/profiles?user_id=${report.target_id}`)
-        ]);
-        targetDetails = {
-          type: "user",
-          data: userRes.data,
-          profile: userProfileRes.data[0] || {}
-        };
+      // Fetch target info based on type
+      let targetData = null;
+      let targetUser = null;
+      let targetProfile = {};
+      
+      try {
+        if (report.target_type === "user") {
+          const targetRes = await api.get(`/users/${report.target_id}`);
+          targetUser = targetRes.data;
+          targetData = { type: "user", data: targetUser };
+          
+          // Get target profile
+          const profilesRes = await api.get("/profiles");
+          const foundProfile = profilesRes.data.find(p => p.user_id === report.target_id);
+          if (foundProfile) {
+            targetProfile = foundProfile;
+          }
+        } 
+        else if (report.target_type === "post") {
+          const postRes = await api.get(`/posts/${report.target_id}`);
+          const post = postRes.data;
+          targetData = { type: "post", data: post };
+          
+          // Get post author
+          const authorRes = await api.get(`/users/${post.author_id}`);
+          targetUser = authorRes.data;
+          
+          // Get author profile
+          const profilesRes = await api.get("/profiles");
+          const foundProfile = profilesRes.data.find(p => p.user_id === post.author_id);
+          if (foundProfile) {
+            targetProfile = foundProfile;
+          }
+        }
+        else if (report.target_type === "comment") {
+          const commentRes = await api.get(`/comments/${report.target_id}`);
+          const comment = commentRes.data;
+          targetData = { type: "comment", data: comment };
+          
+          // Get comment author
+          const authorRes = await api.get(`/users/${comment.author_id}`);
+          targetUser = authorRes.data;
+          
+          // Get author profile
+          const profilesRes = await api.get("/profiles");
+          const foundProfile = profilesRes.data.find(p => p.user_id === comment.author_id);
+          if (foundProfile) {
+            targetProfile = foundProfile;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching target data:", error);
       }
 
       setSelectedReport({
         ...report,
-        reporter: {
-          ...reporterRes.data,
-          profile: reporterProfileRes.data[0] || {}
-        },
-        target: targetDetails
+        reporter: { ...reporter, profile: reporterProfile },
+        targetUser: { ...targetUser, profile: targetProfile },
+        targetData
       });
 
       setShowReportModal(true);
     } catch (error) {
       console.error("Error fetching report details:", error);
+      alert("Error fetching report details");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch Content Details
-  const fetchContentDetails = async (contentId, type) => {
-    try {
-      setLoading(true);
-      setSelectedContentType(type);
+  // Filter Users
+  const filterUsers = () => {
+    let filtered = [...users];
 
-      if (type === "post") {
-        const [postRes, authorRes, postCommentsRes] = await Promise.all([
-          api.get(`/posts/${contentId}`),
-          api.get(`/users/${contentId}`).catch(() => null),
-          api.get(`/comments?post_id=${contentId}`)
-        ]);
-
-        setSelectedContent({
-          type: "post",
-          data: postRes.data,
-          author: authorRes?.data,
-          comments: postCommentsRes.data || []
-        });
-      } else if (type === "comment") {
-        const [commentRes, authorRes] = await Promise.all([
-          api.get(`/comments/${contentId}`),
-          api.get(`/users/${contentId}`).catch(() => null)
-        ]);
-
-        setSelectedContent({
-          type: "comment",
-          data: commentRes.data,
-          author: authorRes?.data
-        });
+    // Apply status filter
+    if (userFilter !== "all") {
+      if (userFilter === "admin" || userFilter === "moderator") {
+        filtered = filtered.filter(user => user.role === userFilter);
+      } else {
+        filtered = filtered.filter(user => user.status === userFilter);
       }
-
-      setShowContentModal(true);
-    } catch (error) {
-      console.error("Error fetching content details:", error);
-    } finally {
-      setLoading(false);
     }
+
+    // Apply search filter
+    if (userSearch.trim()) {
+      const searchTerm = userSearch.toLowerCase();
+      filtered = filtered.filter(user =>
+        user.username.toLowerCase().includes(searchTerm) ||
+        user.email.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    setFilteredUsers(filtered);
+  };
+
+  // Filter Reports
+  const filterReports = () => {
+    let filtered = [...reports];
+
+    // Apply status filter
+    if (reportFilter !== "all") {
+      filtered = filtered.filter(report => report.status === reportFilter);
+    }
+
+    // Apply type filter
+    if (reportTypeFilter !== "all") {
+      filtered = filtered.filter(report => report.target_type === reportTypeFilter);
+    }
+
+    setFilteredReports(filtered);
   };
 
   // Update User Status
-  const updateUserStatus = async (userId, status, reason = "") => {
+  const updateUserStatus = async (userId, status) => {
+    if (!window.confirm(`Are you sure you want to ${status} this user?`)) {
+      return;
+    }
+
     try {
       await api.put(`/users/${userId}`, { status });
-
-      // Log the action
-      await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId"),
-        action: "other",
-        target_id: userId
-      });
-
-      // Refresh data
-      fetchDashboardStats();
+      
+      // Update local state
+      const updatedUsers = users.map(user => 
+        user._id === userId ? { ...user, status } : user
+      );
+      setUsers(updatedUsers);
+      filterUsers();
       
       if (selectedUser?._id === userId) {
         setSelectedUser({ ...selectedUser, status });
       }
 
-      // Show success message
-      alert(`User ${status} successfully${reason ? ` for: ${reason}` : ''}`);
+      // Log activity
+      await api.post("/activity-logs", {
+        user_id: localStorage.getItem("userId") || "admin",
+        action: "other",
+        target_id: userId
+      });
+
+      alert(`User ${status} successfully`);
     } catch (error) {
       console.error("Error updating user status:", error);
       alert("Failed to update user status");
@@ -253,25 +362,29 @@ const AdminPanel = () => {
   };
 
   // Update Report Status
-  const updateReportStatus = async (reportId, status, actionTaken = "") => {
+  const updateReportStatus = async (reportId, status) => {
     try {
       await api.put(`/reports/${reportId}`, { status });
-
-      // Log the action
-      await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId"),
-        action: "other",
-        target_id: reportId
-      });
-
-      // Refresh data
-      fetchDashboardStats();
-
+      
+      // Update local state
+      const updatedReports = reports.map(report =>
+        report._id === reportId ? { ...report, status } : report
+      );
+      setReports(updatedReports);
+      filterReports();
+      
       if (selectedReport?._id === reportId) {
         setSelectedReport({ ...selectedReport, status });
       }
 
-      alert(`Report marked as ${status}${actionTaken ? ` - Action: ${actionTaken}` : ''}`);
+      // Log activity
+      await api.post("/activity-logs", {
+        user_id: localStorage.getItem("userId") || "admin",
+        action: "other",
+        target_id: reportId
+      });
+
+      alert(`Report marked as ${status}`);
     } catch (error) {
       console.error("Error updating report status:", error);
       alert("Failed to update report status");
@@ -280,29 +393,48 @@ const AdminPanel = () => {
 
   // Delete Content
   const deleteContent = async (contentId, contentType) => {
+    if (!window.confirm(`Are you sure you want to delete this ${contentType}?`)) {
+      return;
+    }
+
     try {
       if (contentType === "post") {
         await api.delete(`/posts/${contentId}`);
-        // Also delete related comments
-        const commentsRes = await api.get(`/comments?post_id=${contentId}`);
-        await Promise.all(
-          commentsRes.data.map(comment => api.delete(`/comments/${comment._id}`))
+        
+        // Update local state
+        const updatedPosts = posts.filter(post => post._id !== contentId);
+        setPosts(updatedPosts);
+        
+        // Also remove any reports for this post
+        const updatedReports = reports.filter(report => 
+          !(report.target_type === "post" && report.target_id === contentId)
         );
-      } else if (contentType === "comment") {
+        setReports(updatedReports);
+        filterReports();
+      } 
+      else if (contentType === "comment") {
         await api.delete(`/comments/${contentId}`);
+        
+        // Update local state
+        const updatedComments = comments.filter(comment => comment._id !== contentId);
+        setComments(updatedComments);
+        
+        // Also remove any reports for this comment
+        const updatedReports = reports.filter(report => 
+          !(report.target_type === "comment" && report.target_id === contentId)
+        );
+        setReports(updatedReports);
+        filterReports();
       }
 
-      // Log the action
+      // Log activity
       await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId"),
+        user_id: localStorage.getItem("userId") || "admin",
         action: "deleted_post",
         target_id: contentId
       });
 
-      // Refresh data
-      fetchDashboardStats();
       setShowDeleteModal(false);
-      
       alert(`${contentType.charAt(0).toUpperCase() + contentType.slice(1)} deleted successfully`);
     } catch (error) {
       console.error(`Error deleting ${contentType}:`, error);
@@ -310,108 +442,52 @@ const AdminPanel = () => {
     }
   };
 
-  // Search Users
-  const searchUsers = async (query) => {
-    try {
-      setLoading(true);
-      // Since we don't have a dedicated search endpoint, we'll filter client-side
-      const filteredUsers = users.filter(user =>
-        user.username.toLowerCase().includes(query.toLowerCase()) ||
-        user.email.toLowerCase().includes(query.toLowerCase())
-      );
-      setUsers(filteredUsers);
-    } catch (error) {
-      console.error("Error searching users:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Filter Reports
-  const filterReports = async () => {
-    try {
-      setLoading(true);
-      const reportsRes = await api.get("/reports");
-      let filteredReports = reportsRes.data;
-
-      if (reportFilter !== "all") {
-        filteredReports = filteredReports.filter(r => r.status === reportFilter);
-      }
-
-      if (reportSearch) {
-        filteredReports = filteredReports.filter(r =>
-          r.reason.toLowerCase().includes(reportSearch.toLowerCase()) ||
-          r.target_type.toLowerCase().includes(reportSearch.toLowerCase())
-        );
-      }
-
-      setReports(filteredReports);
-    } catch (error) {
-      console.error("Error filtering reports:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Filter Content
-  const filterContent = async () => {
-    try {
-      setLoading(true);
-      if (selectedContentType === "post") {
-        const postsRes = await api.get("/posts");
-        setPosts(contentFilter === "all" ? postsRes.data : postsRes.data.slice(0, 50));
-      } else if (selectedContentType === "comment") {
-        const commentsRes = await api.get("/comments");
-        setComments(contentFilter === "all" ? commentsRes.data : commentsRes.data.slice(0, 50));
-      }
-    } catch (error) {
-      console.error("Error filtering content:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Ban User with Reason
-  const banUserWithReason = async (userId, reason, duration) => {
+  const banUserWithReason = async () => {
+    if (!banReason.trim()) {
+      alert("Please provide a reason for banning");
+      return;
+    }
+
     try {
-      await api.put(`/users/${userId}`, {
-        status: "suspended",
-        banReason: reason,
-        banDuration: duration,
-        bannedAt: new Date().toISOString()
+      const userId = selectedUser._id;
+      await api.put(`/users/${userId}`, { 
+        status: "suspended" 
       });
 
-      // Send notification to user
-      await api.post("/notifications", {
-        user_id: userId,
-        type: "system",
-        sender_id: localStorage.getItem("userId"),
-        read: false
-      });
-
-      // Log the action
+      // Log activity
       await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId"),
+        user_id: localStorage.getItem("userId") || "admin",
         action: "other",
         target_id: userId
       });
 
-      fetchDashboardStats();
+      // Update local state
+      const updatedUsers = users.map(user => 
+        user._id === userId ? { ...user, status: "suspended" } : user
+      );
+      setUsers(updatedUsers);
+      filterUsers();
+      
+      if (selectedUser) {
+        setSelectedUser({ ...selectedUser, status: "suspended" });
+      }
+
+      // Send system notification
+      await api.post("/notifications", {
+        user_id: userId,
+        type: "system",
+        sender_id: localStorage.getItem("userId") || "admin",
+        read: false
+      });
+
       setShowBanModal(false);
+      setBanReason("");
+      setBanDuration("7");
       alert("User banned successfully");
     } catch (error) {
       console.error("Error banning user:", error);
       alert("Failed to ban user");
-    }
-  };
-
-  // Fetch User Activity
-  const fetchUserActivity = async (userId) => {
-    try {
-      const activityRes = await api.get(`/activity-logs?user_id=${userId}`);
-      setSelectedUserActivity(activityRes.data);
-    } catch (error) {
-      console.error("Error fetching user activity:", error);
     }
   };
 
@@ -422,13 +498,13 @@ const AdminPanel = () => {
       
       if (type === "users") {
         data = users;
-        filename = "users_export.json";
+        filename = `users_export_${new Date().toISOString().split('T')[0]}.json`;
       } else if (type === "reports") {
         data = reports;
-        filename = "reports_export.json";
+        filename = `reports_export_${new Date().toISOString().split('T')[0]}.json`;
       } else if (type === "posts") {
         data = posts;
-        filename = "posts_export.json";
+        filename = `posts_export_${new Date().toISOString().split('T')[0]}.json`;
       }
 
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -451,20 +527,12 @@ const AdminPanel = () => {
   }, []);
 
   useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      if (userSearch) searchUsers(userSearch);
-      else fetchDashboardStats();
-    }, 500);
-    return () => clearTimeout(debounceTimer);
-  }, [userSearch]);
+    filterUsers();
+  }, [userFilter, userSearch, users]);
 
   useEffect(() => {
     filterReports();
-  }, [reportFilter, reportSearch]);
-
-  useEffect(() => {
-    filterContent();
-  }, [contentFilter, selectedContentType]);
+  }, [reportFilter, reportTypeFilter, reports]);
 
   const renderDashboard = () => (
     <div className="space-y-6">
@@ -536,19 +604,19 @@ const AdminPanel = () => {
         <div className="p-6">
           {stats.recentActivity.length > 0 ? (
             <div className="space-y-4">
-              {stats.recentActivity.map((activity) => (
-                <div key={activity._id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded">
+              {stats.recentActivity.map((activity, index) => (
+                <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded">
                   <div>
                     <p className="font-medium">
-                      User {activity.user_id?.username || activity.user_id} {activity.action.replace('_', ' ')}
+                      User {activity.user_id} {activity.action?.replace(/_/g, ' ')}
                     </p>
                     <p className="text-sm text-gray-500">
                       {new Date(activity.createdAt).toLocaleString()}
                     </p>
                   </div>
                   <span className={`px-2 py-1 text-xs rounded-full ${
-                    activity.action.includes('delete') ? 'bg-red-100 text-red-800' :
-                    activity.action.includes('create') ? 'bg-green-100 text-green-800' :
+                    activity.action?.includes('delete') ? 'bg-red-100 text-red-800' :
+                    activity.action?.includes('create') ? 'bg-green-100 text-green-800' :
                     'bg-blue-100 text-blue-800'
                   }`}>
                     {activity.action}
@@ -660,7 +728,7 @@ const AdminPanel = () => {
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b flex justify-between items-center">
-          <h2 className="text-xl font-semibold">Users ({users.length})</h2>
+          <h2 className="text-xl font-semibold">Users ({filteredUsers.length})</h2>
           <button
             onClick={() => exportData("users")}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -681,7 +749,7 @@ const AdminPanel = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <tr key={user._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -694,7 +762,7 @@ const AdminPanel = () => {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{user.username}</div>
-                        <div className="text-sm text-gray-500">ID: {user._id.substring(0, 8)}</div>
+                        <div className="text-sm text-gray-500">ID: {user._id?.substring(0, 8) || 'N/A'}</div>
                       </div>
                     </div>
                   </td>
@@ -718,7 +786,7 @@ const AdminPanel = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(user.createdAt).toLocaleDateString()}
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
@@ -790,33 +858,22 @@ const AdminPanel = () => {
               <option value="resolved">Resolved</option>
             </select>
             <select
+              value={reportTypeFilter}
+              onChange={(e) => setReportTypeFilter(e.target.value)}
               className="border rounded px-3 py-2"
-              onChange={(e) => setReportSearch(e.target.value)}
             >
-              <option value="">All Types</option>
+              <option value="all">All Types</option>
               <option value="user">User Reports</option>
               <option value="post">Post Reports</option>
               <option value="comment">Comment Reports</option>
             </select>
-          </div>
-          <div className="relative flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="Search reports..."
-              value={reportSearch}
-              onChange={(e) => setReportSearch(e.target.value)}
-              className="w-full p-2 pl-10 border rounded"
-            />
-            <svg className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
           </div>
         </div>
       </div>
 
       {/* Reports Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {reports.map((report) => (
+        {filteredReports.map((report) => (
           <div key={report._id} className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-4 border-b">
               <div className="flex justify-between items-start">
@@ -833,7 +890,7 @@ const AdminPanel = () => {
                       {report.target_type}
                     </span>
                   </div>
-                  <h3 className="font-medium">Report: {report.reason.substring(0, 100)}...</h3>
+                  <h3 className="font-medium">Report: {report.reason?.substring(0, 100)}...</h3>
                 </div>
                 <button
                   onClick={() => fetchReportDetails(report._id)}
@@ -845,9 +902,9 @@ const AdminPanel = () => {
             </div>
             <div className="p-4">
               <div className="text-sm text-gray-600 mb-3">
-                <p>Target ID: {report.target_id.substring(0, 12)}...</p>
-                <p>Reporter ID: {report.reporter_id.substring(0, 12)}...</p>
-                <p className="mt-2">Created: {new Date(report.createdAt).toLocaleString()}</p>
+                <p>Target ID: {report.target_id?.substring(0, 12) || 'N/A'}...</p>
+                <p>Reporter ID: {report.reporter_id?.substring(0, 12) || 'N/A'}...</p>
+                <p className="mt-2">Created: {report.createdAt ? new Date(report.createdAt).toLocaleString() : 'N/A'}</p>
               </div>
               <div className="flex space-x-2">
                 <button
@@ -864,11 +921,11 @@ const AdminPanel = () => {
                 </button>
                 <button
                   onClick={() => {
-                    if (report.target_type === 'post') {
-                      deleteContent(report.target_id, 'post');
-                    } else if (report.target_type === 'comment') {
-                      deleteContent(report.target_id, 'comment');
-                    }
+                    setSelectedContent({
+                      id: report.target_id,
+                      type: report.target_type
+                    });
+                    setShowDeleteModal(true);
                   }}
                   className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
                 >
@@ -917,7 +974,6 @@ const AdminPanel = () => {
             <option value="all">All Content</option>
             <option value="recent">Recent</option>
             <option value="reported">Reported</option>
-            <option value="popular">Popular</option>
           </select>
         </div>
       </div>
@@ -935,25 +991,28 @@ const AdminPanel = () => {
               <div key={post._id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">Post ID: {post._id.substring(0, 12)}...</p>
-                    <p className="mt-1">{post.content.substring(0, 200)}...</p>
+                    <p className="text-sm text-gray-500">Post ID: {post._id?.substring(0, 12) || 'N/A'}...</p>
+                    <p className="mt-1">{post.content?.substring(0, 200)}...</p>
                     <div className="flex items-center mt-2 space-x-4 text-sm text-gray-500">
-                      <span>❤️ {post.like_count}</span>
-                      <span>💬 {post.comment_count}</span>
-                      <span>↪️ {post.share_count}</span>
-                      <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                      <span>❤️ {post.like_count || 0}</span>
+                      <span>💬 {post.comment_count || 0}</span>
+                      <span>↪️ {post.share_count || 0}</span>
+                      <span>{post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'N/A'}</span>
                     </div>
                   </div>
                   <div className="flex space-x-2 ml-4">
                     <button
-                      onClick={() => fetchContentDetails(post._id, "post")}
+                      onClick={() => {
+                        setSelectedContent({ id: post._id, type: "post", data: post });
+                        setShowContentModal(true);
+                      }}
                       className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                     >
                       View
                     </button>
                     <button
                       onClick={() => {
-                        setSelectedContent({ type: "post", data: post });
+                        setSelectedContent({ id: post._id, type: "post" });
                         setShowDeleteModal(true);
                       }}
                       className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
@@ -969,23 +1028,26 @@ const AdminPanel = () => {
               <div key={comment._id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">Comment ID: {comment._id.substring(0, 12)}...</p>
-                    <p className="mt-1">{comment.content.substring(0, 200)}...</p>
+                    <p className="text-sm text-gray-500">Comment ID: {comment._id?.substring(0, 12) || 'N/A'}...</p>
+                    <p className="mt-1">{comment.content?.substring(0, 200)}...</p>
                     <div className="flex items-center mt-2 space-x-4 text-sm text-gray-500">
-                      <span>❤️ {comment.like_count}</span>
-                      <span>{new Date(comment.createdAt).toLocaleDateString()}</span>
+                      <span>❤️ {comment.like_count || 0}</span>
+                      <span>{comment.createdAt ? new Date(comment.createdAt).toLocaleDateString() : 'N/A'}</span>
                     </div>
                   </div>
                   <div className="flex space-x-2 ml-4">
                     <button
-                      onClick={() => fetchContentDetails(comment._id, "comment")}
+                      onClick={() => {
+                        setSelectedContent({ id: comment._id, type: "comment", data: comment });
+                        setShowContentModal(true);
+                      }}
                       className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                     >
                       View
                     </button>
                     <button
                       onClick={() => {
-                        setSelectedContent({ type: "comment", data: comment });
+                        setSelectedContent({ id: comment._id, type: "comment" });
                         setShowDeleteModal(true);
                       }}
                       className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
@@ -1013,26 +1075,26 @@ const AdminPanel = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Target ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {activityLogs.map((activity) => (
-                  <tr key={activity._id}>
+                {stats.recentActivity.map((activity, index) => (
+                  <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {activity.user_id?.username || activity.user_id?.substring(0, 12)}
+                      {activity.user_id?.substring(0, 12) || activity.user_id}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded-full ${
-                        activity.action.includes('delete') ? 'bg-red-100 text-red-800' :
-                        activity.action.includes('create') ? 'bg-green-100 text-green-800' :
-                        activity.action.includes('update') ? 'bg-yellow-100 text-yellow-800' :
+                        activity.action?.includes('delete') ? 'bg-red-100 text-red-800' :
+                        activity.action?.includes('create') ? 'bg-green-100 text-green-800' :
+                        activity.action?.includes('update') ? 'bg-yellow-100 text-yellow-800' :
                         'bg-blue-100 text-blue-800'
                       }`}>
-                        {activity.action.replace('_', ' ')}
+                        {activity.action?.replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1149,6 +1211,16 @@ const AdminPanel = () => {
                         </span>
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">User ID</label>
+                      <p className="text-sm text-gray-600">{selectedUser._id}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Joined</label>
+                      <p className="text-sm text-gray-600">
+                        {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : 'N/A'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -1159,8 +1231,8 @@ const AdminPanel = () => {
                       <>
                         <button
                           onClick={() => {
-                            setShowBanModal(true);
                             setShowUserModal(false);
+                            setShowBanModal(true);
                           }}
                           className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                         >
@@ -1187,12 +1259,25 @@ const AdminPanel = () => {
                         Activate User
                       </button>
                     )}
+                    {selectedUser.role !== 'admin' && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Are you sure you want to delete this user permanently?")) {
+                            updateUserStatus(selectedUser._id, 'deleted');
+                            setShowUserModal(false);
+                          }
+                        }}
+                        className="w-full px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                      >
+                        Delete User
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Profile Info */}
-              {selectedUser.profile && (
+              {selectedUser.profile && Object.keys(selectedUser.profile).length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold mb-4">Profile Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1235,21 +1320,26 @@ const AdminPanel = () => {
               </div>
 
               {/* Recent Activity */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
-                <div className="space-y-2">
-                  {selectedUser.activity?.slice(0, 5).map((activity) => (
-                    <div key={activity._id} className="p-3 bg-gray-50 rounded">
-                      <div className="flex justify-between">
-                        <span className="font-medium">{activity.action.replace('_', ' ')}</span>
-                        <span className="text-sm text-gray-500">
-                          {new Date(activity.createdAt).toLocaleString()}
-                        </span>
+              {selectedUser.activity && selectedUser.activity.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+                  <div className="space-y-2">
+                    {selectedUser.activity.map((activity, index) => (
+                      <div key={index} className="p-3 bg-gray-50 rounded">
+                        <div className="flex justify-between">
+                          <span className="font-medium">{activity.action?.replace(/_/g, ' ')}</span>
+                          <span className="text-sm text-gray-500">
+                            {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                        {activity.target_id && (
+                          <p className="text-sm text-gray-600 mt-1">Target: {activity.target_id.substring(0, 12)}...</p>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1295,6 +1385,18 @@ const AdminPanel = () => {
                       <label className="block text-sm font-medium text-gray-500">Reason</label>
                       <p className="p-3 bg-gray-50 rounded">{selectedReport.reason}</p>
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Created</label>
+                      <p className="text-sm text-gray-600">
+                        {selectedReport.createdAt ? new Date(selectedReport.createdAt).toLocaleString() : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500">Last Updated</label>
+                      <p className="text-sm text-gray-600">
+                        {selectedReport.updatedAt ? new Date(selectedReport.updatedAt).toLocaleString() : 'N/A'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -1305,47 +1407,82 @@ const AdminPanel = () => {
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                         <span className="text-blue-600 font-medium">
-                          {selectedReport.reporter.username?.charAt(0).toUpperCase()}
+                          {selectedReport.reporter?.username?.charAt(0).toUpperCase() || '?'}
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium">{selectedReport.reporter.username}</p>
-                        <p className="text-sm text-gray-500">{selectedReport.reporter.email}</p>
+                        <p className="font-medium">{selectedReport.reporter?.username || 'Unknown User'}</p>
+                        <p className="text-sm text-gray-500">{selectedReport.reporter?.email || 'N/A'}</p>
+                        <p className="text-xs text-gray-500">ID: {selectedReport.reporter_id?.substring(0, 12)}...</p>
                       </div>
                     </div>
+                    {selectedReport.reporter?.profile?.bio && (
+                      <p className="mt-2 text-sm text-gray-600">{selectedReport.reporter.profile.bio}</p>
+                    )}
                   </div>
                 </div>
 
                 {/* Target Info */}
-                {selectedReport.target && (
+                {selectedReport.targetUser && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">Reported User</h3>
+                    <div className="bg-gray-50 p-4 rounded">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                          <span className="text-red-600 font-medium">
+                            {selectedReport.targetUser.username?.charAt(0).toUpperCase() || '?'}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{selectedReport.targetUser.username || 'Unknown User'}</p>
+                          <p className="text-sm text-gray-500">{selectedReport.targetUser.email || 'N/A'}</p>
+                          <div className="flex gap-2 mt-1">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              selectedReport.targetUser.status === 'active' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {selectedReport.targetUser.status}
+                            </span>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              selectedReport.targetUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {selectedReport.targetUser.role}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {selectedReport.targetUser.profile?.bio && (
+                        <p className="mt-2 text-sm text-gray-600">{selectedReport.targetUser.profile.bio}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Target Content */}
+                {selectedReport.targetData && (
                   <div>
                     <h3 className="text-lg font-semibold mb-2">Reported Content</h3>
                     <div className="bg-gray-50 p-4 rounded">
                       <div className="mb-2">
                         <span className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded">
-                          {selectedReport.target.type}
+                          {selectedReport.targetData.type}
                         </span>
                       </div>
-                      {selectedReport.target.type === 'post' && (
+                      {selectedReport.targetData.type === 'post' && selectedReport.targetData.data && (
                         <>
-                          <p className="mb-2">{selectedReport.target.data.content}</p>
-                          {selectedReport.target.data.media_url && (
+                          <p className="mb-2">{selectedReport.targetData.data.content}</p>
+                          {selectedReport.targetData.data.media_url && (
                             <img
-                              src={selectedReport.target.data.media_url}
+                              src={selectedReport.targetData.data.media_url}
                               alt="Reported content"
-                              className="max-w-full h-auto rounded"
+                              className="max-w-full h-auto rounded mt-2"
                             />
                           )}
                         </>
                       )}
-                      {selectedReport.target.type === 'comment' && (
-                        <p>{selectedReport.target.data.content}</p>
-                      )}
-                      {selectedReport.target.type === 'user' && (
-                        <div>
-                          <p className="font-medium">{selectedReport.target.data.username}</p>
-                          <p className="text-sm text-gray-500">{selectedReport.target.data.email}</p>
-                        </div>
+                      {selectedReport.targetData.type === 'comment' && selectedReport.targetData.data && (
+                        <p>{selectedReport.targetData.data.content}</p>
                       )}
                     </div>
                   </div>
@@ -1365,10 +1502,10 @@ const AdminPanel = () => {
                   >
                     Mark as Resolved
                   </button>
-                  {selectedReport.target && (
+                  {selectedReport.target_type !== 'user' && (
                     <button
                       onClick={() => {
-                        deleteContent(selectedReport.target.data._id, selectedReport.target.type);
+                        deleteContent(selectedReport.target_id, selectedReport.target_type);
                         setShowReportModal(false);
                       }}
                       className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
@@ -1384,17 +1521,19 @@ const AdminPanel = () => {
       )}
 
       {/* Ban Modal */}
-      {showBanModal && (
+      {showBanModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
             <div className="p-6">
-              <h2 className="text-xl font-bold mb-4">Ban User</h2>
+              <h2 className="text-xl font-bold mb-4">Ban User: {selectedUser.username}</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Reason for Ban
                   </label>
                   <textarea
+                    value={banReason}
+                    onChange={(e) => setBanReason(e.target.value)}
                     className="w-full p-2 border rounded"
                     rows="3"
                     placeholder="Enter reason for banning this user..."
@@ -1402,9 +1541,13 @@ const AdminPanel = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Duration
+                    Duration (days)
                   </label>
-                  <select className="w-full p-2 border rounded">
+                  <select 
+                    value={banDuration}
+                    onChange={(e) => setBanDuration(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
                     <option value="1">1 day</option>
                     <option value="7">7 days</option>
                     <option value="30">30 days</option>
@@ -1413,21 +1556,17 @@ const AdminPanel = () => {
                 </div>
                 <div className="flex justify-end space-x-2">
                   <button
-                    onClick={() => setShowBanModal(false)}
+                    onClick={() => {
+                      setShowBanModal(false);
+                      setBanReason("");
+                      setBanDuration("7");
+                    }}
                     className="px-4 py-2 text-gray-600 hover:text-gray-800"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      const textarea = document.querySelector('textarea');
-                      const select = document.querySelector('select');
-                      banUserWithReason(
-                        selectedUser._id,
-                        textarea.value,
-                        select.value
-                      );
-                    }}
+                    onClick={banUserWithReason}
                     className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                   >
                     Confirm Ban
@@ -1448,6 +1587,16 @@ const AdminPanel = () => {
               <p className="mb-6">
                 Are you sure you want to delete this {selectedContent.type}? This action cannot be undone.
               </p>
+              {selectedContent.type === 'post' && selectedContent.data && (
+                <div className="mb-4 p-3 bg-gray-50 rounded">
+                  <p className="text-sm text-gray-600">{selectedContent.data.content?.substring(0, 100)}...</p>
+                </div>
+              )}
+              {selectedContent.type === 'comment' && selectedContent.data && (
+                <div className="mb-4 p-3 bg-gray-50 rounded">
+                  <p className="text-sm text-gray-600">{selectedContent.data.content?.substring(0, 100)}...</p>
+                </div>
+              )}
               <div className="flex justify-end space-x-2">
                 <button
                   onClick={() => setShowDeleteModal(false)}
@@ -1456,7 +1605,7 @@ const AdminPanel = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => deleteContent(selectedContent.data._id, selectedContent.type)}
+                  onClick={() => deleteContent(selectedContent.id, selectedContent.type)}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                 >
                   Delete
