@@ -58,8 +58,21 @@ const AppRoutes = () => {
         }
       />
 
-      {/* Auth & Register */}
-      <Route path="/login" element={<Login />} />
+      {/* Auth & Register - redirect if already logged in */}
+      <Route 
+        path="/login" 
+        element={
+          user ? (
+            user.role === "admin" ? (
+              <Navigate to="/admin" replace />
+            ) : (
+              <Navigate to="/home" replace />
+            )
+          ) : (
+            <Login />
+          )
+        } 
+      />
       <Route path="/register" element={<Register />} />
 
       {/* Protected routes */}

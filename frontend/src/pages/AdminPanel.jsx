@@ -1,16 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../lib/axios";
+import { AuthContext } from "../context/AuthContext";
 
 const AdminPanel = () => {
+  const navigate = useNavigate();
+  const { logout: authLogout } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  
+  // Dashboard Stats
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalPosts: 0,
+    totalComments: 0,
     totalReports: 0,
     pendingReports: 0,
     activeUsers: 0,
     suspendedUsers: 0,
+    totalLikes: 0,
+    totalShares: 0,
+    totalFollows: 0,
+    totalMessages: 0,
+    totalNotifications: 0,
+    totalMedia: 0,
+    totalSearches: 0,
     recentActivity: []
   });
 
@@ -19,6 +34,7 @@ const AdminPanel = () => {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [userFilter, setUserFilter] = useState("all");
   const [userSearch, setUserSearch] = useState("");
+  const [userRoles, setUserRoles] = useState([]);
 
   // Reports State
   const [reports, setReports] = useState([]);
@@ -29,13 +45,30 @@ const AdminPanel = () => {
   // Content State
   const [posts, setPosts] = useState([]);
   const [comments, setComments] = useState([]);
+  const [media, setMedia] = useState([]);
   const [contentFilter, setContentFilter] = useState("all");
+
+  // Activity & Logs State
+  const [activities, setActivities] = useState([]);
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [messages, setMessages] = useState([]);
+  
+  // Additional Data
+  const [likes, setLikes] = useState([]);
+  const [shares, setShares] = useState([]);
+  const [follows, setFollows] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [userSettings, setUserSettings] = useState([]);
 
   // Selection State
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedReport, setSelectedReport] = useState(null);
   const [selectedContent, setSelectedContent] = useState(null);
   const [selectedContentType, setSelectedContentType] = useState("post");
+  const [selectedActivity, setSelectedActivity] = useState(null);
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [selectedMessage, setSelectedMessage] = useState(null);
 
   // Modal States
   const [showUserModal, setShowUserModal] = useState(false);
@@ -43,141 +76,204 @@ const AdminPanel = () => {
   const [showContentModal, setShowContentModal] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showEditRoleModal, setShowEditRoleModal] = useState(false);
+  const [showEditContentModal, setShowEditContentModal] = useState(false);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showBulkActionModal, setShowBulkActionModal] = useState(false);
 
   // Form States
   const [banReason, setBanReason] = useState("");
   const [banDuration, setBanDuration] = useState("7");
+  const [warningMessage, setWarningMessage] = useState("");
+  const [newRole, setNewRole] = useState("user");
+  const [editContent, setEditContent] = useState("");
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [bulkAction, setBulkAction] = useState("");
+
+  // New Content Creation
+  const [newContent, setNewContent] = useState({
+    type: "post",
+    title: "",
+    content: "",
+    author_id: "",
+    category: ""
+  });
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
 
   // Add axios interceptor for authentication
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      // Redirect to login if no token
+      navigate("/login");
     }
-  }, []);
+  }, [navigate]);
 
-  // Fetch Dashboard Stats
+  // Fetch All Dashboard Data
   const fetchDashboardStats = async () => {
     try {
       setLoading(true);
       
       // Fetch all data in parallel
-      const [usersRes, postsRes, reportsRes, activityRes] = await Promise.all([
+      const [
+        usersRes, postsRes, commentsRes, reportsRes, 
+        activitiesRes, likesRes, sharesRes, followsRes,
+        mediaRes, messagesRes, notificationsRes, 
+        searchHistoryRes, profilesRes, userSettingsRes
+      ] = await Promise.all([
         api.get("/users"),
         api.get("/posts"),
+        api.get("/comments"),
         api.get("/reports"),
-        api.get("/activity-logs")
+        api.get("/activity-logs"),
+        api.get("/likes"),
+        api.get("/shares"),
+        api.get("/follows"),
+        api.get("/media"),
+        api.get("/messages"),
+        api.get("/notifications"),
+        api.get("/search-histories"),
+        api.get("/profiles"),
+        api.get("/userSettings")
       ]);
 
-      const usersData = usersRes.data;
-      const postsData = postsRes.data;
-      const reportsData = reportsRes.data;
-      const activityData = activityRes.data;
+      // Set states
+      setUsers(usersRes.data);
+      setFilteredUsers(usersRes.data);
+      setPosts(postsRes.data);
+      setComments(commentsRes.data);
+      setReports(reportsRes.data);
+      setFilteredReports(reportsRes.data);
+      setActivities(activitiesRes.data);
+      setLikes(likesRes.data);
+      setShares(sharesRes.data);
+      setFollows(followsRes.data);
+      setMedia(mediaRes.data);
+      setMessages(messagesRes.data);
+      setNotifications(notificationsRes.data);
+      setSearchHistory(searchHistoryRes.data);
+      setProfiles(profilesRes.data);
+      setUserSettings(userSettingsRes.data);
 
+      // Calculate stats
+      const usersData = usersRes.data;
       const totalUsers = usersData.length;
       const activeUsers = usersData.filter(u => u.status === "active").length;
       const suspendedUsers = usersData.filter(u => u.status === "suspended").length;
-      const pendingReports = reportsData.filter(r => r.status === "pending").length;
+      const pendingReports = reportsRes.data.filter(r => r.status === "pending").length;
+      
+      // Extract unique roles
+      const roles = [...new Set(usersData.map(user => user.role))];
+      setUserRoles(roles);
 
       setStats({
         totalUsers,
-        totalPosts: postsData.length,
-        totalReports: reportsData.length,
+        totalPosts: postsRes.data.length,
+        totalComments: commentsRes.data.length,
+        totalReports: reportsRes.data.length,
         pendingReports,
         activeUsers,
         suspendedUsers,
-        recentActivity: activityData.slice(0, 5).map(activity => ({
+        totalLikes: likesRes.data.length,
+        totalShares: sharesRes.data.length,
+        totalFollows: followsRes.data.length,
+        totalMessages: messagesRes.data.length,
+        totalNotifications: notificationsRes.data.length,
+        totalMedia: mediaRes.data.length,
+        totalSearches: searchHistoryRes.data.length,
+        recentActivity: activitiesRes.data.slice(0, 10).map(activity => ({
           ...activity,
           user_id: activity.user_id?._id || activity.user_id
         }))
       });
 
-      setUsers(usersData);
-      setFilteredUsers(usersData);
-      setPosts(postsData);
-      setReports(reportsData);
-      setFilteredReports(reportsData);
-
-      // Fetch comments
-      const commentsRes = await api.get("/comments");
-      setComments(commentsRes.data);
-
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
-      alert("Error fetching data. Please check your connection.");
+      console.error("Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url
+      });
+      
+      if (error.response?.status === 401) {
+        handleLogout();
+      } else if (error.response?.status) {
+        // Server responded with error status
+        alert(`Error fetching data: ${error.response?.status} - ${error.response?.data?.message || error.message}. Check console for details.`);
+      } else if (error.request) {
+        // Request was made but no response received
+        alert("No response from server. Please check if the backend server is running on http://localhost:5000");
+      } else {
+        // Error in request setup
+        alert(`Error: ${error.message}. Please check your connection.`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch User Details with all related data
+  // Enhanced User Details Fetch
   const fetchUserDetails = async (userId) => {
     try {
       setLoading(true);
       
-      // Fetch user data
+      // Fetch user with all related data
       const userRes = await api.get(`/users/${userId}`);
       const user = userRes.data;
-      
-      // Fetch profile data
-      let profile = {};
-      try {
-        const profileRes = await api.get(`/profiles`);
-        const userProfile = profileRes.data.find(p => p.user_id === userId);
-        if (userProfile) {
-          profile = userProfile;
-        }
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-      }
 
-      // Fetch user's posts
-      let userPosts = [];
-      try {
-        const postsRes = await api.get("/posts");
-        userPosts = postsRes.data.filter(post => post.author_id === userId);
-      } catch (error) {
-        console.error("Error fetching user posts:", error);
-      }
-
-      // Fetch user's comments
-      let userComments = [];
-      try {
-        const commentsRes = await api.get("/comments");
-        userComments = commentsRes.data.filter(comment => comment.author_id === userId);
-      } catch (error) {
-        console.error("Error fetching user comments:", error);
-      }
-
-      // Fetch reports against this user
-      let userReports = [];
-      try {
-        const reportsRes = await api.get("/reports");
-        userReports = reportsRes.data.filter(report => 
+      // Fetch related data in parallel
+      const [
+        profileRes, postsRes, commentsRes, reportsRes, 
+        activitiesRes, likesRes, followsRes, messagesRes, 
+        settingsRes, userNotifications, userMessages
+      ] = await Promise.all([
+        api.get(`/profiles/${userId}`).catch(() => ({ data: {} })),
+        api.get("/posts").then(res => res.data.filter(post => post.author_id === userId)),
+        api.get("/comments").then(res => res.data.filter(comment => comment.author_id === userId)),
+        api.get("/reports").then(res => res.data.filter(report => 
           (report.target_type === "user" && report.target_id === userId) ||
-          (report.target_type === "post" && userPosts.some(post => post._id === report.target_id)) ||
-          (report.target_type === "comment" && userComments.some(comment => comment._id === report.target_id))
-        );
-      } catch (error) {
-        console.error("Error fetching user reports:", error);
-      }
-
-      // Fetch user's activity
-      let userActivity = [];
-      try {
-        const activityRes = await api.get("/activity-logs");
-        userActivity = activityRes.data.filter(activity => activity.user_id === userId);
-      } catch (error) {
-        console.error("Error fetching user activity:", error);
-      }
+          (report.target_type === "post" && res.data.some(post => post._id === report.target_id)) ||
+          (report.target_type === "comment" && res.data.some(comment => comment._id === report.target_id))
+        )),
+        api.get("/activity-logs").then(res => res.data.filter(activity => activity.user_id === userId)),
+        api.get("/likes").then(res => res.data.filter(like => like.user_id === userId)),
+        api.get("/follows").then(res => ({
+          following: res.data.filter(follow => follow.follower_id === userId),
+          followers: res.data.filter(follow => follow.following_id === userId)
+        })),
+        api.get("/messages").then(res => res.data.filter(msg => 
+          msg.sender_id === userId || msg.receiver_id === userId
+        )),
+        api.get(`/userSettings/${userId}`).catch(() => ({ data: {} })),
+        api.get("/notifications").then(res => res.data.filter(n => n.user_id === userId)),
+        api.get("/messages").then(res => res.data.filter(m => 
+          m.sender_id === userId || m.receiver_id === userId
+        ))
+      ]);
 
       setSelectedUser({
         ...user,
-        profile,
-        posts: userPosts,
-        comments: userComments,
-        reports: userReports,
-        activity: userActivity.slice(0, 10) // Show last 10 activities
+        profile: profileRes.data || {},
+        posts: postsRes,
+        comments: commentsRes,
+        reports: reportsRes,
+        activities: activitiesRes.slice(0, 20),
+        likes: likesRes,
+        follows: followsRes,
+        messages: messagesRes,
+        settings: settingsRes.data || {},
+        notifications: userNotifications,
+        userMessages: userMessages
       });
 
       setShowUserModal(true);
@@ -189,91 +285,28 @@ const AdminPanel = () => {
     }
   };
 
-  // Fetch Report Details with all related data
+  // Enhanced Report Details Fetch
   const fetchReportDetails = async (reportId) => {
     try {
       setLoading(true);
       
-      // Fetch report data
       const reportRes = await api.get(`/reports/${reportId}`);
       const report = reportRes.data;
 
-      // Fetch reporter info
-      let reporter = {};
-      let reporterProfile = {};
-      try {
-        const reporterRes = await api.get(`/users/${report.reporter_id}`);
-        reporter = reporterRes.data;
-        
-        // Try to get reporter profile
-        const profilesRes = await api.get("/profiles");
-        const foundProfile = profilesRes.data.find(p => p.user_id === report.reporter_id);
-        if (foundProfile) {
-          reporterProfile = foundProfile;
-        }
-      } catch (error) {
-        console.error("Error fetching reporter:", error);
-      }
-
-      // Fetch target info based on type
-      let targetData = null;
-      let targetUser = null;
-      let targetProfile = {};
-      
-      try {
-        if (report.target_type === "user") {
-          const targetRes = await api.get(`/users/${report.target_id}`);
-          targetUser = targetRes.data;
-          targetData = { type: "user", data: targetUser };
-          
-          // Get target profile
-          const profilesRes = await api.get("/profiles");
-          const foundProfile = profilesRes.data.find(p => p.user_id === report.target_id);
-          if (foundProfile) {
-            targetProfile = foundProfile;
-          }
-        } 
-        else if (report.target_type === "post") {
-          const postRes = await api.get(`/posts/${report.target_id}`);
-          const post = postRes.data;
-          targetData = { type: "post", data: post };
-          
-          // Get post author
-          const authorRes = await api.get(`/users/${post.author_id}`);
-          targetUser = authorRes.data;
-          
-          // Get author profile
-          const profilesRes = await api.get("/profiles");
-          const foundProfile = profilesRes.data.find(p => p.user_id === post.author_id);
-          if (foundProfile) {
-            targetProfile = foundProfile;
-          }
-        }
-        else if (report.target_type === "comment") {
-          const commentRes = await api.get(`/comments/${report.target_id}`);
-          const comment = commentRes.data;
-          targetData = { type: "comment", data: comment };
-          
-          // Get comment author
-          const authorRes = await api.get(`/users/${comment.author_id}`);
-          targetUser = authorRes.data;
-          
-          // Get author profile
-          const profilesRes = await api.get("/profiles");
-          const foundProfile = profilesRes.data.find(p => p.user_id === comment.author_id);
-          if (foundProfile) {
-            targetProfile = foundProfile;
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching target data:", error);
-      }
+      // Fetch all related data
+      const [reporterRes, targetRes, activitiesRes] = await Promise.all([
+        api.get(`/users/${report.reporter_id}`),
+        fetchTargetData(report.target_type, report.target_id),
+        api.get("/activity-logs").then(res => 
+          res.data.filter(activity => activity.target_id === reportId)
+        )
+      ]);
 
       setSelectedReport({
         ...report,
-        reporter: { ...reporter, profile: reporterProfile },
-        targetUser: { ...targetUser, profile: targetProfile },
-        targetData
+        reporter: reporterRes.data,
+        target: targetRes,
+        activities: activitiesRes
       });
 
       setShowReportModal(true);
@@ -285,25 +318,46 @@ const AdminPanel = () => {
     }
   };
 
+  // Helper to fetch target data
+  const fetchTargetData = async (type, id) => {
+    try {
+      if (type === "user") {
+        const res = await api.get(`/users/${id}`);
+        return { type: "user", data: res.data };
+      } else if (type === "post") {
+        const res = await api.get(`/posts/${id}`);
+        return { type: "post", data: res.data };
+      } else if (type === "comment") {
+        const res = await api.get(`/comments/${id}`);
+        return { type: "comment", data: res.data };
+      } else if (type === "media") {
+        const res = await api.get(`/media/${id}`);
+        return { type: "media", data: res.data };
+      }
+    } catch (error) {
+      console.error(`Error fetching ${type} data:`, error);
+      return { type, data: null };
+    }
+  };
+
   // Filter Users
   const filterUsers = () => {
     let filtered = [...users];
 
-    // Apply status filter
     if (userFilter !== "all") {
-      if (userFilter === "admin" || userFilter === "moderator") {
+      if (["admin", "moderator", "user"].includes(userFilter)) {
         filtered = filtered.filter(user => user.role === userFilter);
       } else {
         filtered = filtered.filter(user => user.status === userFilter);
       }
     }
 
-    // Apply search filter
     if (userSearch.trim()) {
       const searchTerm = userSearch.toLowerCase();
       filtered = filtered.filter(user =>
-        user.username.toLowerCase().includes(searchTerm) ||
-        user.email.toLowerCase().includes(searchTerm)
+        user.username?.toLowerCase().includes(searchTerm) ||
+        user.email?.toLowerCase().includes(searchTerm) ||
+        user._id?.toLowerCase().includes(searchTerm)
       );
     }
 
@@ -314,17 +368,463 @@ const AdminPanel = () => {
   const filterReports = () => {
     let filtered = [...reports];
 
-    // Apply status filter
     if (reportFilter !== "all") {
       filtered = filtered.filter(report => report.status === reportFilter);
     }
 
-    // Apply type filter
     if (reportTypeFilter !== "all") {
       filtered = filtered.filter(report => report.target_type === reportTypeFilter);
     }
 
     setFilteredReports(filtered);
+  };
+
+  // CRUD Operations for Users
+  const createUser = async (userData) => {
+    try {
+      const res = await api.post("/users", userData);
+      setUsers([...users, res.data]);
+      filterUsers();
+      alert("User created successfully");
+      return res.data;
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw error;
+    }
+  };
+
+  const updateUser = async (userId, updates) => {
+    try {
+      const res = await api.put(`/users/${userId}`, updates);
+      
+      const updatedUsers = users.map(user => 
+        user._id === userId ? { ...user, ...updates } : user
+      );
+      setUsers(updatedUsers);
+      filterUsers();
+      
+      if (selectedUser?._id === userId) {
+        setSelectedUser({ ...selectedUser, ...updates });
+      }
+
+      // Log activity
+      await createActivityLog({
+        action: "user_updated",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: userId,
+        details: JSON.stringify(updates)
+      });
+
+      return res.data;
+    } catch (error) {
+      console.error("Error updating user:", error);
+      throw error;
+    }
+  };
+
+  const deleteUser = async (userId) => {
+    try {
+      await api.delete(`/users/${userId}`);
+      setUsers(users.filter(user => user._id !== userId));
+      filterUsers();
+      
+      // Log activity
+      await createActivityLog({
+        action: "user_deleted",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: userId
+      });
+
+      alert("User deleted successfully");
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Posts
+  const createPost = async (postData) => {
+    try {
+      const res = await api.post("/posts", postData);
+      setPosts([...posts, res.data]);
+      alert("Post created successfully");
+      return res.data;
+    } catch (error) {
+      console.error("Error creating post:", error);
+      throw error;
+    }
+  };
+
+  const updatePost = async (postId, updates) => {
+    try {
+      const res = await api.put(`/posts/${postId}`, updates);
+      
+      const updatedPosts = posts.map(post => 
+        post._id === postId ? { ...post, ...updates } : post
+      );
+      setPosts(updatedPosts);
+
+      // Log activity
+      await createActivityLog({
+        action: "post_updated",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: postId,
+        details: JSON.stringify(updates)
+      });
+
+      return res.data;
+    } catch (error) {
+      console.error("Error updating post:", error);
+      throw error;
+    }
+  };
+
+  const deletePost = async (postId) => {
+    try {
+      await api.delete(`/posts/${postId}`);
+      setPosts(posts.filter(post => post._id !== postId));
+      
+      // Log activity
+      await createActivityLog({
+        action: "post_deleted",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: postId
+      });
+
+      alert("Post deleted successfully");
+    } catch (error) {
+      console.error("Error deleting post:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Comments
+  const createComment = async (commentData) => {
+    try {
+      const res = await api.post("/comments", commentData);
+      setComments([...comments, res.data]);
+      alert("Comment created successfully");
+      return res.data;
+    } catch (error) {
+      console.error("Error creating comment:", error);
+      throw error;
+    }
+  };
+
+  const updateComment = async (commentId, updates) => {
+    try {
+      const res = await api.put(`/comments/${commentId}`, updates);
+      
+      const updatedComments = comments.map(comment => 
+        comment._id === commentId ? { ...comment, ...updates } : comment
+      );
+      setComments(updatedComments);
+
+      // Log activity
+      await createActivityLog({
+        action: "comment_updated",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: commentId,
+        details: JSON.stringify(updates)
+      });
+
+      return res.data;
+    } catch (error) {
+      console.error("Error updating comment:", error);
+      throw error;
+    }
+  };
+
+  const deleteComment = async (commentId) => {
+    try {
+      await api.delete(`/comments/${commentId}`);
+      setComments(comments.filter(comment => comment._id !== commentId));
+      
+      // Log activity
+      await createActivityLog({
+        action: "comment_deleted",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: commentId
+      });
+
+      alert("Comment deleted successfully");
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Media
+  const createMedia = async (mediaData) => {
+    try {
+      const res = await api.post("/media", mediaData);
+      setMedia([...media, res.data]);
+      alert("Media uploaded successfully");
+      return res.data;
+    } catch (error) {
+      console.error("Error uploading media:", error);
+      throw error;
+    }
+  };
+
+  const deleteMedia = async (mediaId) => {
+    try {
+      await api.delete(`/media/${mediaId}`);
+      setMedia(media.filter(item => item._id !== mediaId));
+      
+      // Log activity
+      await createActivityLog({
+        action: "media_deleted",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: mediaId
+      });
+
+      alert("Media deleted successfully");
+    } catch (error) {
+      console.error("Error deleting media:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Reports
+  const createReport = async (reportData) => {
+    try {
+      const res = await api.post("/reports", reportData);
+      setReports([...reports, res.data]);
+      filterReports();
+      alert("Report created successfully");
+      return res.data;
+    } catch (error) {
+      console.error("Error creating report:", error);
+      throw error;
+    }
+  };
+
+  const updateReport = async (reportId, updates) => {
+    try {
+      const res = await api.put(`/reports/${reportId}`, updates);
+      
+      const updatedReports = reports.map(report => 
+        report._id === reportId ? { ...report, ...updates } : report
+      );
+      setReports(updatedReports);
+      filterReports();
+      
+      if (selectedReport?._id === reportId) {
+        setSelectedReport({ ...selectedReport, ...updates });
+      }
+
+      // Log activity
+      await createActivityLog({
+        action: "report_updated",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: reportId,
+        details: JSON.stringify(updates)
+      });
+
+      return res.data;
+    } catch (error) {
+      console.error("Error updating report:", error);
+      throw error;
+    }
+  };
+
+  const deleteReport = async (reportId) => {
+    try {
+      await api.delete(`/reports/${reportId}`);
+      setReports(reports.filter(report => report._id !== reportId));
+      filterReports();
+      
+      // Log activity
+      await createActivityLog({
+        action: "report_deleted",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: reportId
+      });
+
+      alert("Report deleted successfully");
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Activity Logs
+  const createActivityLog = async (activityData) => {
+    try {
+      await api.post("/activity-logs", {
+        ...activityData,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error creating activity log:", error);
+    }
+  };
+
+  const deleteActivityLog = async (activityId) => {
+    try {
+      await api.delete(`/activity-logs/${activityId}`);
+      setActivities(activities.filter(activity => activity._id !== activityId));
+      alert("Activity log deleted successfully");
+    } catch (error) {
+      console.error("Error deleting activity log:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Notifications
+  const createNotification = async (notificationData) => {
+    try {
+      const res = await api.post("/notifications", notificationData);
+      setNotifications([...notifications, res.data]);
+      return res.data;
+    } catch (error) {
+      console.error("Error creating notification:", error);
+      throw error;
+    }
+  };
+
+  const updateNotification = async (notificationId, updates) => {
+    try {
+      const res = await api.put(`/notifications/${notificationId}`, updates);
+      
+      const updatedNotifications = notifications.map(notification => 
+        notification._id === notificationId ? { ...notification, ...updates } : notification
+      );
+      setNotifications(updatedNotifications);
+
+      return res.data;
+    } catch (error) {
+      console.error("Error updating notification:", error);
+      throw error;
+    }
+  };
+
+  const deleteNotification = async (notificationId) => {
+    try {
+      await api.delete(`/notifications/${notificationId}`);
+      setNotifications(notifications.filter(n => n._id !== notificationId));
+      alert("Notification deleted successfully");
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Messages
+  const createMessage = async (messageData) => {
+    try {
+      const res = await api.post("/messages", messageData);
+      setMessages([...messages, res.data]);
+      alert("Message sent successfully");
+      return res.data;
+    } catch (error) {
+      console.error("Error creating message:", error);
+      throw error;
+    }
+  };
+
+  const deleteMessage = async (messageId) => {
+    try {
+      await api.delete(`/messages/${messageId}`);
+      setMessages(messages.filter(m => m._id !== messageId));
+      alert("Message deleted successfully");
+    } catch (error) {
+      console.error("Error deleting message:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Follows
+  const createFollow = async (followData) => {
+    try {
+      const res = await api.post("/follows", followData);
+      setFollows([...follows, res.data]);
+      return res.data;
+    } catch (error) {
+      console.error("Error creating follow:", error);
+      throw error;
+    }
+  };
+
+  const deleteFollow = async (followId) => {
+    try {
+      await api.delete(`/follows/${followId}`);
+      setFollows(follows.filter(f => f._id !== followId));
+    } catch (error) {
+      console.error("Error deleting follow:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Likes
+  const createLike = async (likeData) => {
+    try {
+      const res = await api.post("/likes", likeData);
+      setLikes([...likes, res.data]);
+      return res.data;
+    } catch (error) {
+      console.error("Error creating like:", error);
+      throw error;
+    }
+  };
+
+  const deleteLike = async (likeId) => {
+    try {
+      await api.delete(`/likes/${likeId}`);
+      setLikes(likes.filter(l => l._id !== likeId));
+    } catch (error) {
+      console.error("Error deleting like:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Shares
+  const createShare = async (shareData) => {
+    try {
+      const res = await api.post("/shares", shareData);
+      setShares([...shares, res.data]);
+      return res.data;
+    } catch (error) {
+      console.error("Error creating share:", error);
+      throw error;
+    }
+  };
+
+  const deleteShare = async (shareId) => {
+    try {
+      await api.delete(`/shares/${shareId}`);
+      setShares(shares.filter(s => s._id !== shareId));
+    } catch (error) {
+      console.error("Error deleting share:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for Search History
+  const deleteSearchHistory = async (searchId) => {
+    try {
+      await api.delete(`/search-histories/${searchId}`);
+      setSearchHistory(searchHistory.filter(s => s._id !== searchId));
+    } catch (error) {
+      console.error("Error deleting search history:", error);
+      throw error;
+    }
+  };
+
+  // CRUD Operations for User Settings
+  const updateUserSettings = async (userId, settings) => {
+    try {
+      const res = await api.put(`/userSettings/${userId}`, settings);
+      const updatedSettings = userSettings.map(setting => 
+        setting.user_id === userId ? { ...setting, ...settings } : setting
+      );
+      setUserSettings(updatedSettings);
+      return res.data;
+    } catch (error) {
+      console.error("Error updating user settings:", error);
+      throw error;
+    }
   };
 
   // Update User Status
@@ -334,149 +834,78 @@ const AdminPanel = () => {
     }
 
     try {
-      await api.put(`/users/${userId}`, { status });
-      
-      // Update local state
-      const updatedUsers = users.map(user => 
-        user._id === userId ? { ...user, status } : user
-      );
-      setUsers(updatedUsers);
-      filterUsers();
-      
-      if (selectedUser?._id === userId) {
-        setSelectedUser({ ...selectedUser, status });
-      }
-
-      // Log activity
-      await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId") || "admin",
-        action: "other",
-        target_id: userId
-      });
-
+      await updateUser(userId, { status });
       alert(`User ${status} successfully`);
     } catch (error) {
-      console.error("Error updating user status:", error);
       alert("Failed to update user status");
     }
   };
 
-  // Update Report Status
-  const updateReportStatus = async (reportId, status) => {
+  // Update User Role
+  const handleUpdateUserRole = async () => {
+    if (!selectedUser) return;
+    
     try {
-      await api.put(`/reports/${reportId}`, { status });
-      
-      // Update local state
-      const updatedReports = reports.map(report =>
-        report._id === reportId ? { ...report, status } : report
-      );
-      setReports(updatedReports);
-      filterReports();
-      
-      if (selectedReport?._id === reportId) {
-        setSelectedReport({ ...selectedReport, status });
-      }
-
-      // Log activity
-      await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId") || "admin",
-        action: "other",
-        target_id: reportId
-      });
-
-      alert(`Report marked as ${status}`);
+      await updateUser(selectedUser._id, { role: newRole });
+      setShowEditRoleModal(false);
+      setNewRole("user");
+      alert(`User role updated to ${newRole}`);
     } catch (error) {
-      console.error("Error updating report status:", error);
-      alert("Failed to update report status");
+      alert("Failed to update user role");
     }
   };
 
-  // Delete Content
-  const deleteContent = async (contentId, contentType) => {
-    if (!window.confirm(`Are you sure you want to delete this ${contentType}?`)) {
+  // Send Warning to User
+  const handleSendWarning = async () => {
+    if (!selectedUser || !warningMessage.trim()) {
+      alert("Please provide a warning message");
       return;
     }
 
     try {
-      if (contentType === "post") {
-        await api.delete(`/posts/${contentId}`);
-        
-        // Update local state
-        const updatedPosts = posts.filter(post => post._id !== contentId);
-        setPosts(updatedPosts);
-        
-        // Also remove any reports for this post
-        const updatedReports = reports.filter(report => 
-          !(report.target_type === "post" && report.target_id === contentId)
-        );
-        setReports(updatedReports);
-        filterReports();
-      } 
-      else if (contentType === "comment") {
-        await api.delete(`/comments/${contentId}`);
-        
-        // Update local state
-        const updatedComments = comments.filter(comment => comment._id !== contentId);
-        setComments(updatedComments);
-        
-        // Also remove any reports for this comment
-        const updatedReports = reports.filter(report => 
-          !(report.target_type === "comment" && report.target_id === contentId)
-        );
-        setReports(updatedReports);
-        filterReports();
-      }
-
-      // Log activity
-      await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId") || "admin",
-        action: "deleted_post",
-        target_id: contentId
+      await createNotification({
+        user_id: selectedUser._id,
+        type: "warning",
+        content: warningMessage,
+        sender_id: localStorage.getItem("userId") || "admin",
+        read: false
       });
 
-      setShowDeleteModal(false);
-      alert(`${contentType.charAt(0).toUpperCase() + contentType.slice(1)} deleted successfully`);
+      await createActivityLog({
+        action: "warning_sent",
+        user_id: localStorage.getItem("userId") || "admin",
+        target_id: selectedUser._id,
+        details: warningMessage
+      });
+
+      setShowWarningModal(false);
+      setWarningMessage("");
+      alert("Warning sent to user successfully");
     } catch (error) {
-      console.error(`Error deleting ${contentType}:`, error);
-      alert(`Failed to delete ${contentType}`);
+      console.error("Error sending warning:", error);
+      alert("Failed to send warning");
     }
   };
 
   // Ban User with Reason
-  const banUserWithReason = async () => {
+  const handleBanUser = async () => {
     if (!banReason.trim()) {
       alert("Please provide a reason for banning");
       return;
     }
 
     try {
-      const userId = selectedUser._id;
-      await api.put(`/users/${userId}`, { 
-        status: "suspended" 
+      await updateUser(selectedUser._id, { 
+        status: "suspended",
+        suspension_reason: banReason,
+        suspension_duration: banDuration === "permanent" ? null : parseInt(banDuration),
+        suspended_at: new Date().toISOString()
       });
 
-      // Log activity
-      await api.post("/activity-logs", {
-        user_id: localStorage.getItem("userId") || "admin",
-        action: "other",
-        target_id: userId
-      });
-
-      // Update local state
-      const updatedUsers = users.map(user => 
-        user._id === userId ? { ...user, status: "suspended" } : user
-      );
-      setUsers(updatedUsers);
-      filterUsers();
-      
-      if (selectedUser) {
-        setSelectedUser({ ...selectedUser, status: "suspended" });
-      }
-
-      // Send system notification
-      await api.post("/notifications", {
-        user_id: userId,
-        type: "system",
+      await createNotification({
+        user_id: selectedUser._id,
+        type: "suspension",
+        content: `Your account has been suspended. Reason: ${banReason}`,
         sender_id: localStorage.getItem("userId") || "admin",
         read: false
       });
@@ -491,20 +920,168 @@ const AdminPanel = () => {
     }
   };
 
+  // Update Report Status
+  const handleUpdateReportStatus = async (reportId, status, action = null) => {
+    try {
+      const updates = { status };
+      if (action) {
+        updates.action_taken = action;
+      }
+
+      await updateReport(reportId, updates);
+      alert(`Report marked as ${status}`);
+    } catch (error) {
+      console.error("Error updating report status:", error);
+      alert("Failed to update report status");
+    }
+  };
+
+  // Edit Content
+  const handleEditContent = async () => {
+    if (!selectedContent || !editContent.trim()) return;
+    
+    try {
+      if (selectedContent.type === "post") {
+        await updatePost(selectedContent.id, {
+          content: editContent,
+          edited_by: localStorage.getItem("userId") || "admin",
+          edited_at: new Date().toISOString()
+        });
+      } else if (selectedContent.type === "comment") {
+        await updateComment(selectedContent.id, {
+          content: editContent,
+          edited_by: localStorage.getItem("userId") || "admin",
+          edited_at: new Date().toISOString()
+        });
+      }
+      
+      setShowEditContentModal(false);
+      setEditContent("");
+      alert("Content updated successfully");
+    } catch (error) {
+      alert("Failed to update content");
+    }
+  };
+
+  // Delete Content
+  const handleDeleteContent = async () => {
+    if (!selectedContent) return;
+    
+    try {
+      if (selectedContent.type === "post") {
+        await deletePost(selectedContent.id);
+      } else if (selectedContent.type === "comment") {
+        await deleteComment(selectedContent.id);
+      } else if (selectedContent.type === "media") {
+        await deleteMedia(selectedContent.id);
+      }
+
+      setShowDeleteModal(false);
+      alert(`${selectedContent.type.charAt(0).toUpperCase() + selectedContent.type.slice(1)} deleted successfully`);
+    } catch (error) {
+      alert(`Failed to delete ${selectedContent.type}`);
+    }
+  };
+
+  // Create New Content
+  const handleCreateContent = async () => {
+    try {
+      if (newContent.type === "post") {
+        await createPost({
+          title: newContent.title,
+          content: newContent.content,
+          author_id: newContent.author_id || localStorage.getItem("userId") || "admin",
+          category: newContent.category
+        });
+      } else if (newContent.type === "comment") {
+        await createComment({
+          content: newContent.content,
+          author_id: newContent.author_id || localStorage.getItem("userId") || "admin",
+          post_id: newContent.post_id
+        });
+      }
+
+      setShowCreateModal(false);
+      setNewContent({
+        type: "post",
+        title: "",
+        content: "",
+        author_id: "",
+        category: ""
+      });
+      alert("Content created successfully");
+      fetchDashboardStats();
+    } catch (error) {
+      alert("Failed to create content");
+    }
+  };
+
+  // Bulk Actions
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedItems.length === 0) {
+      alert("Please select items and an action");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to ${bulkAction} ${selectedItems.length} item(s)?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      for (const item of selectedItems) {
+        if (bulkAction === "delete") {
+          if (item.type === "user") {
+            await deleteUser(item.id);
+          } else if (item.type === "post") {
+            await deletePost(item.id);
+          } else if (item.type === "comment") {
+            await deleteComment(item.id);
+          } else if (item.type === "report") {
+            await deleteReport(item.id);
+          }
+        } else if (bulkAction === "activate") {
+          await updateUser(item.id, { status: "active" });
+        } else if (bulkAction === "suspend") {
+          await updateUser(item.id, { status: "suspended" });
+        }
+      }
+
+      setShowBulkActionModal(false);
+      setBulkAction("");
+      setSelectedItems([]);
+      alert(`Bulk action ${bulkAction} completed successfully`);
+      fetchDashboardStats();
+    } catch (error) {
+      alert("Failed to perform bulk action");
+    }
+  };
+
   // Export Data
   const exportData = async (type) => {
     try {
       let data, filename;
       
-      if (type === "users") {
-        data = users;
-        filename = `users_export_${new Date().toISOString().split('T')[0]}.json`;
-      } else if (type === "reports") {
-        data = reports;
-        filename = `reports_export_${new Date().toISOString().split('T')[0]}.json`;
-      } else if (type === "posts") {
-        data = posts;
-        filename = `posts_export_${new Date().toISOString().split('T')[0]}.json`;
+      switch (type) {
+        case "users":
+          data = users;
+          filename = `users_export_${new Date().toISOString().split('T')[0]}.json`;
+          break;
+        case "posts":
+          data = posts;
+          filename = `posts_export_${new Date().toISOString().split('T')[0]}.json`;
+          break;
+        case "reports":
+          data = reports;
+          filename = `reports_export_${new Date().toISOString().split('T')[0]}.json`;
+          break;
+        case "activities":
+          data = activities;
+          filename = `activities_export_${new Date().toISOString().split('T')[0]}.json`;
+          break;
+        default:
+          return;
       }
 
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -522,181 +1099,315 @@ const AdminPanel = () => {
     }
   };
 
+  // View Activity Details
+  const handleViewActivityDetails = async (activityId) => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/activity-logs/${activityId}`);
+      setSelectedActivity(res.data);
+      setShowActivityModal(true);
+    } catch (error) {
+      console.error("Error fetching activity details:", error);
+      alert("Failed to load activity details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // View Notification Details
+  const handleViewNotificationDetails = async (notificationId) => {
+    try {
+      const res = await api.get(`/notifications/${notificationId}`);
+      setSelectedNotification(res.data);
+      setShowNotificationModal(true);
+    } catch (error) {
+      console.error("Error fetching notification details:", error);
+      alert("Failed to load notification details");
+    }
+  };
+
+  // View Message Details
+  const handleViewMessageDetails = async (messageId) => {
+    try {
+      const res = await api.get(`/messages/${messageId}`);
+      setSelectedMessage(res.data);
+      setShowMessageModal(true);
+    } catch (error) {
+      console.error("Error fetching message details:", error);
+      alert("Failed to load message details");
+    }
+  };
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      // Log the logout activity
+      await createActivityLog({
+        action: "admin_logout",
+        user_id: localStorage.getItem("userId") || "admin",
+        details: "Admin logged out from dashboard"
+      });
+    } catch (error) {
+      console.error("Error logging logout activity:", error);
+      // Continue with logout even if logging fails
+    }
+
+    // Use AuthContext logout to clear user state and localStorage
+    authLogout();
+    
+    // Navigate to login
+    navigate("/login", { replace: true });
+  };
+
+  // Toggle item selection for bulk actions
+  const toggleItemSelection = (item) => {
+    setSelectedItems(prev => {
+      const exists = prev.some(i => i.id === item.id && i.type === item.type);
+      if (exists) {
+        return prev.filter(i => !(i.id === item.id && i.type === item.type));
+      } else {
+        return [...prev, item];
+      }
+    });
+  };
+
+  // Check if item is selected
+  const isItemSelected = (item) => {
+    return selectedItems.some(i => i.id === item.id && i.type === item.type);
+  };
+
+  // Select all items on current page
+  const selectAllItems = () => {
+    let items = [];
+    if (activeTab === "users") {
+      items = currentUsers.map(user => ({ id: user._id, type: "user" }));
+    } else if (activeTab === "reports") {
+      items = filteredReports.map(report => ({ id: report._id, type: "report" }));
+    } else if (activeTab === "content") {
+      if (selectedContentType === "post") {
+        items = posts.map(post => ({ id: post._id, type: "post" }));
+      } else if (selectedContentType === "comment") {
+        items = comments.map(comment => ({ id: comment._id, type: "comment" }));
+      }
+    }
+    setSelectedItems(items);
+  };
+
+  // Clear all selections
+  const clearSelections = () => {
+    setSelectedItems([]);
+  };
+
+  // Pagination calculations
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+
+  // Initialize data
   useEffect(() => {
     fetchDashboardStats();
   }, []);
 
+  // Filter users when filters change
   useEffect(() => {
     filterUsers();
   }, [userFilter, userSearch, users]);
 
+  // Filter reports when filters change
   useEffect(() => {
     filterReports();
   }, [reportFilter, reportTypeFilter, reports]);
 
+  // StatCard Component
+  const StatCard = ({ title, value, icon, color, trend }) => {
+    const colorClasses = {
+      blue: 'bg-blue-50 text-blue-700',
+      green: 'bg-green-50 text-green-700',
+      red: 'bg-red-50 text-red-700',
+      yellow: 'bg-yellow-50 text-yellow-700',
+      purple: 'bg-purple-50 text-purple-700',
+      pink: 'bg-pink-50 text-pink-700',
+      indigo: 'bg-indigo-50 text-indigo-700',
+      gray: 'bg-gray-50 text-gray-700'
+    };
+
+    return (
+      <div className={`${colorClasses[color]} p-4 rounded-lg`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{title}</p>
+            <p className="text-2xl font-bold mt-1">{value}</p>
+            {trend && (
+              <p className="text-xs mt-1 opacity-75">{trend}</p>
+            )}
+          </div>
+          <div className="text-2xl">{icon}</div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render Dashboard
   const renderDashboard = () => (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-blue-100">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5 1.5l-5-5m0 0l-5 5m5-5v12" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Total Users</p>
-              <p className="text-2xl font-bold">{stats.totalUsers}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-green-100">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Total Posts</p>
-              <p className="text-2xl font-bold">{stats.totalPosts}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-red-100">
-              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.346 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Pending Reports</p>
-              <p className="text-2xl font-bold">{stats.pendingReports}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-yellow-100">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Active Users</p>
-              <p className="text-2xl font-bold">{stats.activeUsers}</p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <StatCard 
+          title="Total Users" 
+          value={stats.totalUsers}
+          icon="👥"
+          color="blue"
+          trend={`${stats.activeUsers} active`}
+        />
+        <StatCard 
+          title="Total Posts" 
+          value={stats.totalPosts}
+          icon="📝"
+          color="green"
+        />
+        <StatCard 
+          title="Pending Reports" 
+          value={stats.pendingReports}
+          icon="⚠️"
+          color="red"
+          trend={`${stats.totalReports} total`}
+        />
+        <StatCard 
+          title="Active Users" 
+          value={stats.activeUsers}
+          icon="✅"
+          color="green"
+          trend={`${stats.suspendedUsers} suspended`}
+        />
+        <StatCard 
+          title="Total Likes" 
+          value={stats.totalLikes}
+          icon="❤️"
+          color="pink"
+        />
+        <StatCard 
+          title="Total Comments" 
+          value={stats.totalComments}
+          icon="💬"
+          color="blue"
+        />
+        <StatCard 
+          title="Total Shares" 
+          value={stats.totalShares}
+          icon="↪️"
+          color="yellow"
+        />
+        <StatCard 
+          title="Total Follows" 
+          value={stats.totalFollows}
+          icon="👥"
+          color="purple"
+        />
+        <StatCard 
+          title="Total Media" 
+          value={stats.totalMedia}
+          icon="🖼️"
+          color="indigo"
+        />
+        <StatCard 
+          title="Searches" 
+          value={stats.totalSearches}
+          icon="🔍"
+          color="gray"
+        />
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-semibold">Recent Activity</h2>
-        </div>
-        <div className="p-6">
-          {stats.recentActivity.length > 0 ? (
-            <div className="space-y-4">
-              {stats.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded">
-                  <div>
-                    <p className="font-medium">
-                      User {activity.user_id} {activity.action?.replace(/_/g, ' ')}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(activity.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    activity.action?.includes('delete') ? 'bg-red-100 text-red-800' :
-                    activity.action?.includes('create') ? 'bg-green-100 text-green-800' :
-                    'bg-blue-100 text-blue-800'
-                  }`}>
-                    {activity.action}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-4">No recent activity</p>
-          )}
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="font-semibold mb-4">Quick Actions</h3>
-          <div className="space-y-2">
-            <button
-              onClick={() => exportData("users")}
-              className="w-full text-left px-4 py-2 text-blue-600 hover:bg-blue-50 rounded"
-            >
-              Export Users Data
-            </button>
-            <button
-              onClick={() => exportData("reports")}
-              className="w-full text-left px-4 py-2 text-blue-600 hover:bg-blue-50 rounded"
-            >
-              Export Reports Data
-            </button>
-            <button
-              onClick={() => exportData("posts")}
-              className="w-full text-left px-4 py-2 text-blue-600 hover:bg-blue-50 rounded"
-            >
-              Export Posts Data
-            </button>
-          </div>
-        </div>
-
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* System Status */}
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="font-semibold mb-4">System Status</h3>
           <div className="space-y-3">
-            <div className="flex justify-between">
-              <span>Database</span>
-              <span className="text-green-600 font-medium">● Online</span>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>API Server</span>
+              </div>
+              <span className="text-green-600 font-medium">Online</span>
             </div>
-            <div className="flex justify-between">
-              <span>API Server</span>
-              <span className="text-green-600 font-medium">● Online</span>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>Database</span>
+              </div>
+              <span className="text-green-600 font-medium">Online</span>
             </div>
-            <div className="flex justify-between">
-              <span>Storage</span>
-              <span className="text-green-600 font-medium">● 65% Free</span>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>Storage</span>
+              </div>
+              <span className="text-green-600 font-medium">72% Free</span>
             </div>
           </div>
         </div>
 
+        {/* Quick Actions */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="font-semibold mb-4">Pending Reviews</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span>User Reports</span>
-              <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{stats.pendingReports}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Suspended Users</span>
-              <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">{stats.suspendedUsers}</span>
-            </div>
+          <h3 className="font-semibold mb-4">Quick Actions</h3>
+          <div className="space-y-3">
+            <button
+              onClick={() => exportData("users")}
+              className="w-full text-left px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center justify-between"
+            >
+              <span>Export Users Data</span>
+              <span>⬇️</span>
+            </button>
+            <button
+              onClick={() => exportData("reports")}
+              className="w-full text-left px-4 py-3 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center justify-between"
+            >
+              <span>Export Reports Data</span>
+              <span>⬇️</span>
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="w-full text-left px-4 py-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center justify-between"
+            >
+              <span>Create New Content</span>
+              <span>➕</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h3 className="font-semibold mb-4">Recent Activity</h3>
+          <div className="space-y-3">
+            {stats.recentActivity.slice(0, 5).map((activity, index) => (
+              <div key={index} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                <div className="text-sm">
+                  <span className="font-medium">
+                    {activity.user_id?.substring(0, 8) || 'System'}
+                  </span>
+                  <span className="text-gray-600 ml-2">
+                    {activity.action?.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {new Date(activity.createdAt).toLocaleTimeString()}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
     </div>
   );
 
+  // Render Users Tab
   const renderUsersTab = () => (
     <div className="space-y-6">
-      {/* Filters and Search */}
+      {/* Filters and Bulk Actions */}
       <div className="bg-white p-4 rounded-lg shadow">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex space-x-4">
+          <div className="flex flex-wrap gap-2">
             <select
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
@@ -705,23 +1416,46 @@ const AdminPanel = () => {
               <option value="all">All Users</option>
               <option value="active">Active</option>
               <option value="suspended">Suspended</option>
-              <option value="deleted">Deleted</option>
               <option value="admin">Admins</option>
               <option value="moderator">Moderators</option>
+              <option value="user">Regular Users</option>
             </select>
-          </div>
-          <div className="relative flex-1 max-w-md">
             <input
               type="text"
-              placeholder="Search users by username or email..."
+              placeholder="Search users..."
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
-              className="w-full p-2 pl-10 border rounded"
+              className="border rounded px-3 py-2"
             />
-            <svg className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            {selectedItems.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">
+                  {selectedItems.length} selected
+                </span>
+                <button
+                  onClick={() => setShowBulkActionModal(true)}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Bulk Actions
+                </button>
+                <button
+                  onClick={clearSelections}
+                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
+          <button
+            onClick={() => {
+              // Open create user modal
+              alert("Create user functionality would open here");
+            }}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            + Add User
+          </button>
         </div>
       </div>
 
@@ -729,19 +1463,34 @@ const AdminPanel = () => {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold">Users ({filteredUsers.length})</h2>
-          <button
-            onClick={() => exportData("users")}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Export Users
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={selectAllItems}
+              className="px-3 py-2 text-sm border rounded hover:bg-gray-50"
+            >
+              Select All
+            </button>
+            <button
+              onClick={() => exportData("users")}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Export
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <input
+                    type="checkbox"
+                    checked={selectedItems.length === currentUsers.length}
+                    onChange={selectAllItems}
+                    className="rounded"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
@@ -749,24 +1498,29 @@ const AdminPanel = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => (
+              {currentUsers.map((user) => (
                 <tr key={user._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={isItemSelected({ id: user._id, type: "user" })}
+                      onChange={() => toggleItemSelection({ id: user._id, type: "user" })}
+                      className="rounded"
+                    />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <span className="text-blue-600 font-medium">
-                            {user.username?.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
+                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <span className="text-blue-600 font-medium">
+                          {user.username?.charAt(0).toUpperCase()}
+                        </span>
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{user.username}</div>
-                        <div className="text-sm text-gray-500">ID: {user._id?.substring(0, 8) || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
@@ -796,6 +1550,15 @@ const AdminPanel = () => {
                       >
                         View
                       </button>
+                      <button
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowEditRoleModal(true);
+                        }}
+                        className="text-purple-600 hover:text-purple-900"
+                      >
+                        Edit Role
+                      </button>
                       {user.status === 'active' ? (
                         <>
                           <button
@@ -822,14 +1585,6 @@ const AdminPanel = () => {
                           Activate
                         </button>
                       )}
-                      {user.role !== 'admin' && (
-                        <button
-                          onClick={() => updateUserStatus(user._id, 'deleted')}
-                          className="text-gray-600 hover:text-gray-900"
-                        >
-                          Delete
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -837,22 +1592,63 @@ const AdminPanel = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredUsers.length)} of {filteredUsers.length} results
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className={`px-3 py-1 rounded ${
+                  currentPage === 1 ? "bg-gray-100 text-gray-400" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                }`}
+              >
+                Previous
+              </button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === i + 1 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className={`px-3 py-1 rounded ${
+                  currentPage === totalPages ? "bg-gray-100 text-gray-400" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 
+  // Render Reports Tab
   const renderReportsTab = () => (
     <div className="space-y-6">
-      {/* Filters and Search */}
+      {/* Filters */}
       <div className="bg-white p-4 rounded-lg shadow">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex space-x-4">
+          <div className="flex flex-wrap gap-2">
             <select
               value={reportFilter}
               onChange={(e) => setReportFilter(e.target.value)}
               className="border rounded px-3 py-2"
             >
-              <option value="all">All Reports</option>
+              <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="reviewed">Reviewed</option>
               <option value="resolved">Resolved</option>
@@ -866,6 +1662,7 @@ const AdminPanel = () => {
               <option value="user">User Reports</option>
               <option value="post">Post Reports</option>
               <option value="comment">Comment Reports</option>
+              <option value="media">Media Reports</option>
             </select>
           </div>
         </div>
@@ -873,72 +1670,75 @@ const AdminPanel = () => {
 
       {/* Reports Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredReports.map((report) => (
-          <div key={report._id} className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="p-4 border-b">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      report.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
-                      {report.status}
-                    </span>
-                    <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
-                      {report.target_type}
-                    </span>
+        {filteredReports.map((report) => {
+          const reporter = users.find(u => u._id === report.reporter_id);
+          
+          return (
+            <div key={report._id} className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="p-4 border-b">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        report.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {report.status}
+                      </span>
+                      <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
+                        {report.target_type}
+                      </span>
+                    </div>
+                    <h3 className="font-medium">Report: {report.reason?.substring(0, 100)}...</h3>
+                    <div className="text-sm text-gray-500 mt-2">
+                      Reporter: {reporter?.username || 'Unknown'}
+                    </div>
                   </div>
-                  <h3 className="font-medium">Report: {report.reason?.substring(0, 100)}...</h3>
+                  <button
+                    onClick={() => fetchReportDetails(report._id)}
+                    className="text-blue-600 hover:text-blue-900 text-sm"
+                  >
+                    Details →
+                  </button>
                 </div>
-                <button
-                  onClick={() => fetchReportDetails(report._id)}
-                  className="text-blue-600 hover:text-blue-900 text-sm"
-                >
-                  Details →
-                </button>
+              </div>
+              <div className="p-4">
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleUpdateReportStatus(report._id, 'reviewed')}
+                    className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                  >
+                    Review
+                  </button>
+                  <button
+                    onClick={() => handleUpdateReportStatus(report._id, 'resolved')}
+                    className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
+                  >
+                    Resolve
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedContent({
+                        id: report.target_id,
+                        type: report.target_type
+                      });
+                      setShowDeleteModal(true);
+                    }}
+                    className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                  >
+                    Delete Content
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="p-4">
-              <div className="text-sm text-gray-600 mb-3">
-                <p>Target ID: {report.target_id?.substring(0, 12) || 'N/A'}...</p>
-                <p>Reporter ID: {report.reporter_id?.substring(0, 12) || 'N/A'}...</p>
-                <p className="mt-2">Created: {report.createdAt ? new Date(report.createdAt).toLocaleString() : 'N/A'}</p>
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => updateReportStatus(report._id, 'reviewed')}
-                  className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                >
-                  Review
-                </button>
-                <button
-                  onClick={() => updateReportStatus(report._id, 'resolved')}
-                  className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
-                >
-                  Resolve
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedContent({
-                      id: report.target_id,
-                      type: report.target_type
-                    });
-                    setShowDeleteModal(true);
-                  }}
-                  className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                >
-                  Delete Content
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 
+  // Render Content Tab
   const renderContentTab = () => (
     <div className="space-y-6">
       {/* Content Type Selector */}
@@ -965,16 +1765,23 @@ const AdminPanel = () => {
             >
               Comments ({comments.length})
             </button>
+            <button
+              onClick={() => setSelectedContentType("media")}
+              className={`px-4 py-2 rounded ${
+                selectedContentType === "media" 
+                  ? "bg-blue-600 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Media ({media.length})
+            </button>
           </div>
-          <select
-            value={contentFilter}
-            onChange={(e) => setContentFilter(e.target.value)}
-            className="border rounded px-3 py-2"
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
           >
-            <option value="all">All Content</option>
-            <option value="recent">Recent</option>
-            <option value="reported">Reported</option>
-          </select>
+            + Create Content
+          </button>
         </div>
       </div>
 
@@ -982,37 +1789,77 @@ const AdminPanel = () => {
       <div className="bg-white rounded-lg shadow">
         <div className="p-4 border-b">
           <h2 className="text-xl font-semibold">
-            {selectedContentType === "post" ? "Posts" : "Comments"}
+            {selectedContentType === "post" ? "Posts" : 
+             selectedContentType === "comment" ? "Comments" : 
+             "Media Files"}
           </h2>
         </div>
         <div className="divide-y">
           {selectedContentType === "post" ? (
-            posts.map((post) => (
-              <div key={post._id} className="p-4 hover:bg-gray-50">
+            posts.map((post) => {
+              const author = users.find(u => u._id === post.author_id);
+              
+              return (
+                <div key={post._id} className="p-4 hover:bg-gray-50">
+                  <div className="flex justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-500">
+                        By {author?.username || 'Unknown'} • {new Date(post.createdAt).toLocaleDateString()}
+                      </p>
+                      <p className="mt-1">{post.content?.substring(0, 200)}...</p>
+                      <div className="flex items-center mt-2 space-x-4 text-sm text-gray-500">
+                        <span>❤️ {post.like_count || 0}</span>
+                        <span>💬 {post.comment_count || 0}</span>
+                        <span>↪️ {post.share_count || 0}</span>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2 ml-4">
+                      <button
+                        onClick={() => {
+                          setSelectedContent({ id: post._id, type: "post", data: post });
+                          setEditContent(post.content || "");
+                          setShowEditContentModal(true);
+                        }}
+                        className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedContent({ id: post._id, type: "post" });
+                          setShowDeleteModal(true);
+                        }}
+                        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : selectedContentType === "comment" ? (
+            comments.map((comment) => (
+              <div key={comment._id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">Post ID: {post._id?.substring(0, 12) || 'N/A'}...</p>
-                    <p className="mt-1">{post.content?.substring(0, 200)}...</p>
-                    <div className="flex items-center mt-2 space-x-4 text-sm text-gray-500">
-                      <span>❤️ {post.like_count || 0}</span>
-                      <span>💬 {post.comment_count || 0}</span>
-                      <span>↪️ {post.share_count || 0}</span>
-                      <span>{post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'N/A'}</span>
-                    </div>
+                    <p className="text-sm text-gray-500">Comment ID: {comment._id?.substring(0, 12)}...</p>
+                    <p className="mt-1">{comment.content?.substring(0, 200)}...</p>
                   </div>
                   <div className="flex space-x-2 ml-4">
                     <button
                       onClick={() => {
-                        setSelectedContent({ id: post._id, type: "post", data: post });
-                        setShowContentModal(true);
+                        setSelectedContent({ id: comment._id, type: "comment", data: comment });
+                        setEditContent(comment.content || "");
+                        setShowEditContentModal(true);
                       }}
-                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                      className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
                     >
-                      View
+                      Edit
                     </button>
                     <button
                       onClick={() => {
-                        setSelectedContent({ id: post._id, type: "post" });
+                        setSelectedContent({ id: comment._id, type: "comment" });
                         setShowDeleteModal(true);
                       }}
                       className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
@@ -1024,30 +1871,23 @@ const AdminPanel = () => {
               </div>
             ))
           ) : (
-            comments.map((comment) => (
-              <div key={comment._id} className="p-4 hover:bg-gray-50">
+            media.map((mediaItem) => (
+              <div key={mediaItem._id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">Comment ID: {comment._id?.substring(0, 12) || 'N/A'}...</p>
-                    <p className="mt-1">{comment.content?.substring(0, 200)}...</p>
-                    <div className="flex items-center mt-2 space-x-4 text-sm text-gray-500">
-                      <span>❤️ {comment.like_count || 0}</span>
-                      <span>{comment.createdAt ? new Date(comment.createdAt).toLocaleDateString() : 'N/A'}</span>
-                    </div>
+                    <p className="text-sm text-gray-500">{mediaItem.file_name || 'Media File'}</p>
+                    <p className="text-sm text-gray-500">{mediaItem.file_type} • {Math.round(mediaItem.file_size / 1024)}KB</p>
                   </div>
                   <div className="flex space-x-2 ml-4">
                     <button
-                      onClick={() => {
-                        setSelectedContent({ id: comment._id, type: "comment", data: comment });
-                        setShowContentModal(true);
-                      }}
+                      onClick={() => window.open(mediaItem.file_url, '_blank')}
                       className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                     >
                       View
                     </button>
                     <button
                       onClick={() => {
-                        setSelectedContent({ id: comment._id, type: "comment" });
+                        setSelectedContent({ id: mediaItem._id, type: "media" });
                         setShowDeleteModal(true);
                       }}
                       className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
@@ -1064,6 +1904,7 @@ const AdminPanel = () => {
     </div>
   );
 
+  // Render Activity Tab
   const renderActivityTab = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow">
@@ -1079,10 +1920,11 @@ const AdminPanel = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Target ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {stats.recentActivity.map((activity, index) => (
+                {activities.map((activity, index) => (
                   <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {activity.user_id?.substring(0, 12) || activity.user_id}
@@ -1103,6 +1945,14 @@ const AdminPanel = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(activity.createdAt).toLocaleString()}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => handleViewActivityDetails(activity._id)}
+                        className="text-blue-600 hover:text-blue-900 text-sm"
+                      >
+                        Details
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1116,10 +1966,23 @@ const AdminPanel = () => {
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600 mt-2">Manage users, content, reports, and system activity</p>
+        {/* Header with Logout */}
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-600 mt-2">Manage users, content, reports, and system activity</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-600">
+              Welcome, {localStorage.getItem("username") || "Admin"}
+            </span>
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -1161,13 +2024,39 @@ const AdminPanel = () => {
         </div>
       </div>
 
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4">Confirm Logout</h2>
+              <p className="mb-6">Are you sure you want to logout from the admin panel?</p>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* User Details Modal */}
       {showUserModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">User Details</h2>
+                <h2 className="text-2xl font-bold">User Details: {selectedUser.username}</h2>
                 <button
                   onClick={() => setShowUserModal(false)}
                   className="text-gray-500 hover:text-gray-700"
@@ -1177,8 +2066,8 @@ const AdminPanel = () => {
               </div>
 
               {/* User Info */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
                   <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
                   <div className="space-y-3">
                     <div>
@@ -1210,16 +2099,6 @@ const AdminPanel = () => {
                           {selectedUser.status}
                         </span>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">User ID</label>
-                      <p className="text-sm text-gray-600">{selectedUser._id}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Joined</label>
-                      <p className="text-sm text-gray-600">
-                        {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : 'N/A'}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -1259,49 +2138,29 @@ const AdminPanel = () => {
                         Activate User
                       </button>
                     )}
-                    {selectedUser.role !== 'admin' && (
-                      <button
-                        onClick={() => {
-                          if (window.confirm("Are you sure you want to delete this user permanently?")) {
-                            updateUserStatus(selectedUser._id, 'deleted');
-                            setShowUserModal(false);
-                          }
-                        }}
-                        className="w-full px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                      >
-                        Delete User
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setShowUserModal(false);
+                        setSelectedUser(selectedUser);
+                        setShowEditRoleModal(true);
+                      }}
+                      className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                    >
+                      Edit Role
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUserModal(false);
+                        setSelectedUser(selectedUser);
+                        setShowWarningModal(true);
+                      }}
+                      className="w-full px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                    >
+                      Send Warning
+                    </button>
                   </div>
                 </div>
               </div>
-
-              {/* Profile Info */}
-              {selectedUser.profile && Object.keys(selectedUser.profile).length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-4">Profile Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Bio</label>
-                      <p className="text-gray-700">{selectedUser.profile.bio || "No bio"}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Location</label>
-                      <p className="text-gray-700">{selectedUser.profile.location || "Not specified"}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Website</label>
-                      <p className="text-gray-700">{selectedUser.profile.website || "Not specified"}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Interests</label>
-                      <p className="text-gray-700">
-                        {selectedUser.profile.interests?.join(", ") || "No interests"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* User Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -1316,203 +2175,6 @@ const AdminPanel = () => {
                 <div className="bg-gray-50 p-4 rounded">
                   <h4 className="font-medium text-gray-700">Reports</h4>
                   <p className="text-2xl font-bold">{selectedUser.reports?.length || 0}</p>
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              {selectedUser.activity && selectedUser.activity.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
-                  <div className="space-y-2">
-                    {selectedUser.activity.map((activity, index) => (
-                      <div key={index} className="p-3 bg-gray-50 rounded">
-                        <div className="flex justify-between">
-                          <span className="font-medium">{activity.action?.replace(/_/g, ' ')}</span>
-                          <span className="text-sm text-gray-500">
-                            {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                        {activity.target_id && (
-                          <p className="text-sm text-gray-600 mt-1">Target: {activity.target_id.substring(0, 12)}...</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Report Details Modal */}
-      {showReportModal && selectedReport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Report Details</h2>
-                <button
-                  onClick={() => setShowReportModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                {/* Report Info */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Report Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Status</label>
-                      <span className={`px-2 py-1 text-sm rounded-full ${
-                        selectedReport.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        selectedReport.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
-                        {selectedReport.status}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Target Type</label>
-                      <span className="px-2 py-1 text-sm bg-gray-100 text-gray-800 rounded">
-                        {selectedReport.target_type}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-500">Reason</label>
-                      <p className="p-3 bg-gray-50 rounded">{selectedReport.reason}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Created</label>
-                      <p className="text-sm text-gray-600">
-                        {selectedReport.createdAt ? new Date(selectedReport.createdAt).toLocaleString() : 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Last Updated</label>
-                      <p className="text-sm text-gray-600">
-                        {selectedReport.updatedAt ? new Date(selectedReport.updatedAt).toLocaleString() : 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Reporter Info */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Reporter</h3>
-                  <div className="bg-gray-50 p-4 rounded">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 font-medium">
-                          {selectedReport.reporter?.username?.charAt(0).toUpperCase() || '?'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium">{selectedReport.reporter?.username || 'Unknown User'}</p>
-                        <p className="text-sm text-gray-500">{selectedReport.reporter?.email || 'N/A'}</p>
-                        <p className="text-xs text-gray-500">ID: {selectedReport.reporter_id?.substring(0, 12)}...</p>
-                      </div>
-                    </div>
-                    {selectedReport.reporter?.profile?.bio && (
-                      <p className="mt-2 text-sm text-gray-600">{selectedReport.reporter.profile.bio}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Target Info */}
-                {selectedReport.targetUser && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">Reported User</h3>
-                    <div className="bg-gray-50 p-4 rounded">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                          <span className="text-red-600 font-medium">
-                            {selectedReport.targetUser.username?.charAt(0).toUpperCase() || '?'}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium">{selectedReport.targetUser.username || 'Unknown User'}</p>
-                          <p className="text-sm text-gray-500">{selectedReport.targetUser.email || 'N/A'}</p>
-                          <div className="flex gap-2 mt-1">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              selectedReport.targetUser.status === 'active' ? 'bg-green-100 text-green-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {selectedReport.targetUser.status}
-                            </span>
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              selectedReport.targetUser.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {selectedReport.targetUser.role}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      {selectedReport.targetUser.profile?.bio && (
-                        <p className="mt-2 text-sm text-gray-600">{selectedReport.targetUser.profile.bio}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Target Content */}
-                {selectedReport.targetData && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">Reported Content</h3>
-                    <div className="bg-gray-50 p-4 rounded">
-                      <div className="mb-2">
-                        <span className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded">
-                          {selectedReport.targetData.type}
-                        </span>
-                      </div>
-                      {selectedReport.targetData.type === 'post' && selectedReport.targetData.data && (
-                        <>
-                          <p className="mb-2">{selectedReport.targetData.data.content}</p>
-                          {selectedReport.targetData.data.media_url && (
-                            <img
-                              src={selectedReport.targetData.data.media_url}
-                              alt="Reported content"
-                              className="max-w-full h-auto rounded mt-2"
-                            />
-                          )}
-                        </>
-                      )}
-                      {selectedReport.targetData.type === 'comment' && selectedReport.targetData.data && (
-                        <p>{selectedReport.targetData.data.content}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <button
-                    onClick={() => updateReportStatus(selectedReport._id, 'reviewed')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Mark as Reviewed
-                  </button>
-                  <button
-                    onClick={() => updateReportStatus(selectedReport._id, 'resolved')}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    Mark as Resolved
-                  </button>
-                  {selectedReport.target_type !== 'user' && (
-                    <button
-                      onClick={() => {
-                        deleteContent(selectedReport.target_id, selectedReport.target_type);
-                        setShowReportModal(false);
-                      }}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                    >
-                      Delete Content
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
@@ -1566,10 +2228,262 @@ const AdminPanel = () => {
                     Cancel
                   </button>
                   <button
-                    onClick={banUserWithReason}
+                    onClick={handleBanUser}
                     className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                   >
                     Confirm Ban
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Modal */}
+      {showWarningModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4">Send Warning to {selectedUser.username}</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Warning Message
+                  </label>
+                  <textarea
+                    value={warningMessage}
+                    onChange={(e) => setWarningMessage(e.target.value)}
+                    className="w-full p-2 border rounded"
+                    rows="4"
+                    placeholder="Enter warning message..."
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowWarningModal(false);
+                      setWarningMessage("");
+                    }}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendWarning}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                  >
+                    Send Warning
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Role Modal */}
+      {showEditRoleModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4">Edit Role for {selectedUser.username}</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Current Role: <span className="font-bold">{selectedUser.role}</span>
+                  </label>
+                  <select
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="user">User</option>
+                    <option value="moderator">Moderator</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowEditRoleModal(false);
+                      setNewRole("user");
+                    }}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateUserRole}
+                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                  >
+                    Update Role
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Content Modal */}
+      {showEditContentModal && selectedContent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4">
+                Edit {selectedContent.type.charAt(0).toUpperCase() + selectedContent.type.slice(1)}
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content
+                  </label>
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full p-2 border rounded"
+                    rows="6"
+                    placeholder="Enter content..."
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowEditContentModal(false);
+                      setEditContent("");
+                    }}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEditContent}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Update Content
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Content Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold">Create New Content</h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content Type
+                  </label>
+                  <select
+                    value={newContent.type}
+                    onChange={(e) => setNewContent({...newContent, type: e.target.value})}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="post">Post</option>
+                    <option value="comment">Comment</option>
+                  </select>
+                </div>
+                {newContent.type === "post" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Title
+                    </label>
+                    <input
+                      type="text"
+                      value={newContent.title}
+                      onChange={(e) => setNewContent({...newContent, title: e.target.value})}
+                      className="w-full p-2 border rounded"
+                      placeholder="Enter post title..."
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content
+                  </label>
+                  <textarea
+                    value={newContent.content}
+                    onChange={(e) => setNewContent({...newContent, content: e.target.value})}
+                    className="w-full p-2 border rounded"
+                    rows="6"
+                    placeholder="Enter content..."
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateContent}
+                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Action Modal */}
+      {showBulkActionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold mb-4">Bulk Action</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Action
+                  </label>
+                  <select
+                    value={bulkAction}
+                    onChange={(e) => setBulkAction(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="">Select an action</option>
+                    <option value="delete">Delete Selected</option>
+                    <option value="activate">Activate Users</option>
+                    <option value="suspend">Suspend Users</option>
+                  </select>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {selectedItems.length} item(s) selected
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowBulkActionModal(false);
+                      setBulkAction("");
+                    }}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBulkAction}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Confirm
                   </button>
                 </div>
               </div>
@@ -1587,16 +2501,6 @@ const AdminPanel = () => {
               <p className="mb-6">
                 Are you sure you want to delete this {selectedContent.type}? This action cannot be undone.
               </p>
-              {selectedContent.type === 'post' && selectedContent.data && (
-                <div className="mb-4 p-3 bg-gray-50 rounded">
-                  <p className="text-sm text-gray-600">{selectedContent.data.content?.substring(0, 100)}...</p>
-                </div>
-              )}
-              {selectedContent.type === 'comment' && selectedContent.data && (
-                <div className="mb-4 p-3 bg-gray-50 rounded">
-                  <p className="text-sm text-gray-600">{selectedContent.data.content?.substring(0, 100)}...</p>
-                </div>
-              )}
               <div className="flex justify-end space-x-2">
                 <button
                   onClick={() => setShowDeleteModal(false)}
@@ -1605,7 +2509,7 @@ const AdminPanel = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => deleteContent(selectedContent.id, selectedContent.type)}
+                  onClick={handleDeleteContent}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                 >
                   Delete

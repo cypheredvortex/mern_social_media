@@ -1448,7 +1448,7 @@ const Home = () => {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
-            <Link to="/" className="p-2 rounded-full hover:bg-gray-100 text-gray-700">
+            <Link to="/home" className="p-2 rounded-full hover:bg-gray-100 text-gray-700">
               🏠
             </Link>
             
@@ -1494,6 +1494,20 @@ const Home = () => {
                 </div>
               )}
               <span className="font-medium hidden md:inline">{user?.username}</span>
+            </button>
+            
+            {/* Logout Button */}
+            <button
+              onClick={() => {
+                if (window.confirm("Are you sure you want to logout?")) {
+                  logout();
+                  navigate("/login", { replace: true });
+                }
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+              title="Logout"
+            >
+              Logout
             </button>
           </div>
         </div>
