@@ -22,6 +22,7 @@ const activityLogSchema = new mongoose.Schema(
         "login",
         "logout",
         "other", 
+        "warning_sent",
       ],
     },
     target_id: {
