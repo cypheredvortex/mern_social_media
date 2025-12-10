@@ -671,6 +671,7 @@ const AdminPanel = () => {
       throw error;
     }
   };
+  
 
   // CRUD Operations for Notifications
   const createNotification = async (notificationData) => {
@@ -1218,6 +1219,22 @@ const AdminPanel = () => {
   useEffect(() => {
     filterReports();
   }, [reportFilter, reportTypeFilter, reports]);
+
+  useEffect(() => {
+    if (activeTab === "activity") {
+      console.log("Fetching activity logs..."); // 👈
+      (async () => {
+        try {
+          const res = await api.get("/activity-logs");
+          console.log("Fetched logs:", res.data); // 👈
+          setActivities(res.data);
+        } catch (error) {
+          console.error("Error fetching activity logs:", error);
+        }
+      })();
+    }
+  }, [activeTab]);
+
 
   // StatCard Component
   const StatCard = ({ title, value, icon, color, trend }) => {
@@ -1904,6 +1921,8 @@ const AdminPanel = () => {
     </div>
   );
 
+  
+
   // Render Activity Tab
   const renderActivityTab = () => (
     <div className="space-y-6">
@@ -1927,7 +1946,7 @@ const AdminPanel = () => {
                 {activities.map((activity, index) => (
                   <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {activity.user_id?.substring(0, 12) || activity.user_id}
+                      {typeof activity.user_id === "string"? activity.user_id.substring(0, 12): activity.user_id?._id?.substring(0, 12) || "N/A"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded-full ${
