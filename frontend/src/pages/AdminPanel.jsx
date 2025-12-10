@@ -1582,10 +1582,7 @@ const AdminPanel = () => {
                       {user.status === 'active' ? (
                         <>
                           <button
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowBanModal(true);
-                            }}
+                            onClick={() => updateUserStatus(user._id, 'banned')}
                             className="text-red-600 hover:text-red-900"
                           >
                             Ban
@@ -2132,8 +2129,8 @@ const AdminPanel = () => {
                       <>
                         <button
                           onClick={() => {
+                            updateUserStatus(selectedUser._id, 'banned');
                             setShowUserModal(false);
-                            setShowBanModal(true);
                           }}
                           className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                         >
@@ -2629,63 +2626,60 @@ const AdminPanel = () => {
       )}
 
       {showReportModal && selectedReport && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-    <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-md">
-      <h2 className="text-xl font-bold mb-4">Report Details</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-md">
+            <h2 className="text-xl font-bold mb-4">Report Details</h2>
+            
+            <p><strong>Reporter:</strong> {selectedReport.reporter?.username || "Unknown"}</p>
+            <p><strong>Status:</strong> {selectedReport.status}</p>
+            <p><strong>Reason:</strong> {selectedReport.reason}</p>
+            <p><strong>Target Type:</strong> {selectedReport.target_type}</p>
 
-      <p><strong>Reporter:</strong> {selectedReport.reporter?.username || "Unknown"}</p>
-      <p><strong>Status:</strong> {selectedReport.status}</p>
-      <p><strong>Reason:</strong> {selectedReport.reason}</p>
-      <p><strong>Target Type:</strong> {selectedReport.target_type}</p>
-
-      {selectedReport.target && (
-  <div className="mt-4 p-2 border rounded bg-gray-50">
-    <h3 className="font-semibold">Target Details</h3>
-    {selectedReport.target_type === "user" && (
-      <>
-        <p><strong>Username:</strong> {selectedReport.target.username}</p>
-        <p><strong>Email:</strong> {selectedReport.target.email}</p>
-        <p><strong>Role:</strong> {selectedReport.target.role}</p>
-        <p><strong>Status:</strong> {selectedReport.target.status}</p>
-      </>
-    )}
-    {selectedReport.target_type === "post" && (
-      <>
-        <p><strong>Author:</strong> {selectedReport.target.author_id?.username}</p>
-        <p><strong>Content:</strong> {selectedReport.target.content}</p>
-        <p><strong>Media URL:</strong> {selectedReport.target.media_url}</p>
-        <p><strong>Visibility:</strong> {selectedReport.target.visibility}</p>
-      </>
-    )}
-    {selectedReport.target_type === "comment" && (
-      <>
-        <p><strong>Author:</strong> {selectedReport.target.author_id?.username}</p>
-        <p><strong>Content:</strong> {selectedReport.target.content}</p>
-      </>
-    )}
-    {selectedReport.target_type === "media" && (
-      <>
-        <p><strong>Uploader:</strong> {selectedReport.target.uploader_id?.username}</p>
-        <p><strong>URL:</strong> {selectedReport.target.url}</p>
-        <p><strong>Type:</strong> {selectedReport.target.type}</p>
-      </>
-    )}
-  </div>
-)}
-
-      <div className="mt-4 text-right">
-        <button
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          onClick={() => setShowReportModal(false)}
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-
+            {selectedReport.target && (
+              <div className="mt-4 p-2 border rounded bg-gray-50">
+                <h3 className="font-semibold">Target Details</h3>
+                {selectedReport.target_type === "user" && (
+                  <>
+                    <p><strong>Username:</strong> {selectedReport.target.username}</p>
+                    <p><strong>Email:</strong> {selectedReport.target.email}</p>
+                    <p><strong>Role:</strong> {selectedReport.target.role}</p>
+                    <p><strong>Status:</strong> {selectedReport.target.status}</p>
+                  </>
+                )}
+                {selectedReport.target_type === "post" && (
+                  <>
+                    <p><strong>Author:</strong> {selectedReport.target.author_id?.username}</p>
+                    <p><strong>Content:</strong> {selectedReport.target.content}</p>
+                    <p><strong>Media URL:</strong> {selectedReport.target.media_url}</p>
+                    <p><strong>Visibility:</strong> {selectedReport.target.visibility}</p>
+                  </>
+                )}
+                {selectedReport.target_type === "comment" && (
+                  <>
+                    <p><strong>Author:</strong> {selectedReport.target.author_id?.username}</p>
+                    <p><strong>Content:</strong> {selectedReport.target.content}</p>
+                  </>
+                )}
+                {selectedReport.target_type === "media" && (
+                  <>
+                    <p><strong>Uploader:</strong> {selectedReport.target.uploader_id?.username}</p>
+                    <p><strong>URL:</strong> {selectedReport.target.url}</p>
+                    <p><strong>Type:</strong> {selectedReport.target.type}</p>
+                  </>
+                )}
+              </div>
+            )}
+            <div className="mt-4 text-right">
+              <button
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              onClick={() => setShowReportModal(false)}
+              >
+              Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

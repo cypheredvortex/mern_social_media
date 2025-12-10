@@ -38,7 +38,7 @@ const userSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "suspended", "deleted"],
+      enum: ["active", "suspended", "banned"],
       default: "active",
     },
   },
