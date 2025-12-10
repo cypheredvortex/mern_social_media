@@ -2538,6 +2538,93 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
+
+      {/* Activity Details Modal */}
+      {showActivityModal && selectedActivity && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-2xl overflow-y-auto max-h-[90vh]">
+            <h2 className="text-2xl font-bold mb-4">Activity Details</h2>
+
+            {/* User Info */}
+            <div className="flex items-center space-x-4 mb-4">
+              {selectedActivity.user_id?.profile_id?.profile_picture && (
+                <img
+                  src={selectedActivity.user_id.profile_id.profile_picture}
+                  alt="Profile"
+                  className="w-12 h-12 rounded-full object-cover"
+                />
+              )}
+              <div>
+                <p className="font-semibold">{selectedActivity.user_id?.username || "N/A"}</p>
+                <p className="text-sm text-gray-500">{selectedActivity.user_id?.email}</p>
+                <p className="text-sm text-gray-500 capitalize">{selectedActivity.user_id?.role}</p>
+              </div>
+            </div>
+
+            {/* Action Type */}
+            <p className="mb-2">
+              <strong>Action:</strong>{" "}
+              {selectedActivity.action?.replace(/_/g, " ")}
+            </p>
+
+            {/* Target Info */}
+            {selectedActivity.target_id && (
+              <div className="mb-4 p-4 bg-gray-50 rounded border">
+                <p className="font-semibold mb-2">Target Details:</p>
+                {selectedActivity.action.includes("post") && (
+                  <>
+                    <p><strong>Post Content:</strong> {selectedActivity.target_id?.content}</p>
+                    {selectedActivity.target_id?.media_url && (
+                      <img
+                        src={selectedActivity.target_id.media_url}
+                        alt="Media"
+                        className="mt-2 max-h-48 object-contain"
+                      />
+                    )}
+                    <p><strong>Visibility:</strong> {selectedActivity.target_id.visibility}</p>
+                    <p><strong>Likes:</strong> {selectedActivity.target_id.like_count}</p>
+                    <p><strong>Comments:</strong> {selectedActivity.target_id.comment_count}</p>
+                    <p><strong>Shares:</strong> {selectedActivity.target_id.share_count}</p>
+                  </>
+                )}
+                {selectedActivity.action.includes("comment") && (
+                  <>
+                    <p><strong>Comment Content:</strong> {selectedActivity.target_id?.content}</p>
+                    <p><strong>Post ID:</strong> {selectedActivity.target_id?.post_id || "N/A"}</p>
+                    <p><strong>Likes:</strong> {selectedActivity.target_id?.like_count}</p>
+                  </>
+                )}
+                {selectedActivity.action.includes("follow") && (
+                  <>
+                    <p><strong>Followed User:</strong> {selectedActivity.target_id?.username}</p>
+                    <p><strong>Status:</strong> {selectedActivity.target_id?.status}</p>
+                  </>
+                )}
+                {selectedActivity.action === "login" || selectedActivity.action === "logout" ? (
+                  <p>User performed a {selectedActivity.action} action</p>
+                ) : null}
+              </div>
+            )}
+
+            {/* Timestamp */}
+            <p className="mb-4">
+              <strong>Timestamp:</strong>{" "}
+              {new Date(selectedActivity.createdAt).toLocaleString()}
+            </p>
+
+            {/* Close Button */}
+            <div className="text-right">
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                onClick={() => setShowActivityModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
