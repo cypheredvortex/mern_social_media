@@ -987,38 +987,65 @@ const AdminPanel = () => {
     }
   };
 
+  const handleCreateMediaUpload = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert("File size must be less than 5MB");
+    return;
+  }
+
+  const validTypes = ["image/jpeg", "image/png", "image/gif", "video/mp4"];
+  if (!validTypes.includes(file.type)) {
+    alert("Only images (JPEG, PNG, GIF) and videos (MP4) are allowed");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    const base64Data = reader.result;
+    setNewContent((prev) => ({ ...prev, media_url: base64Data }));
+  };
+  reader.readAsDataURL(file);
+};
+
+
+  
   // Create New Content
   const handleCreateContent = async () => {
-    try {
-      if (newContent.type === "post") {
-        await createPost({
-          title: newContent.title,
-          content: newContent.content,
-          author_id: newContent.author_id || localStorage.getItem("userId") || "admin",
-          category: newContent.category
-        });
-      } else if (newContent.type === "comment") {
-        await createComment({
-          content: newContent.content,
-          author_id: newContent.author_id || localStorage.getItem("userId") || "admin",
-          post_id: newContent.post_id
-        });
-      }
+  if (!newContent.content.trim()) {
+    alert("Post content cannot be empty");
+    return;
+  }
 
-      setShowCreateModal(false);
-      setNewContent({
-        type: "post",
-        title: "",
-        content: "",
-        author_id: "",
-        category: ""
-      });
-      alert("Content created successfully");
-      fetchDashboardStats();
-    } catch (error) {
-      alert("Failed to create content");
-    }
-  };
+  try {
+    await createPost({
+      author_id: localStorage.getItem("userId") || "admin",
+      content: newContent.content,
+      media_url: newContent.media_url || null,
+      visibility: newContent.visibility || "public",
+      like_count: 0,
+      comment_count: 0,
+      share_count: 0,
+    });
+
+    setShowCreateModal(false);
+    setNewContent({
+      content: "",
+      media_url: "",
+      visibility: "public",
+    });
+
+    alert("Post created successfully");
+    fetchDashboardStats?.();
+  } catch (error) {
+    console.error("Error creating post:", error);
+    alert("Failed to create post");
+  }
+};
+
+
 
   // Bulk Actions
   const handleBulkAction = async () => {
@@ -1436,8 +1463,8 @@ const AdminPanel = () => {
               <option value="all">All Users</option>
               <option value="active">Active</option>
               <option value="suspended">Suspended</option>
+              <option value="banned">Banned</option>
               <option value="admin">Admins</option>
-              <option value="moderator">Moderators</option>
               <option value="user">Regular Users</option>
             </select>
             <input
@@ -1467,15 +1494,6 @@ const AdminPanel = () => {
               </div>
             )}
           </div>
-          {/* <button
-            onClick={() => {
-              // Open create user modal
-              alert("Create user functionality would open here");
-            }}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-          >
-            + Add User
-          </button> */}
         </div>
       </div>
 
@@ -2462,53 +2480,116 @@ const AdminPanel = () => {
         </div>
       )}
 
-      {/* Bulk Action Modal */}
-      {showBulkActionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
-            <div className="p-6">
-              <h2 className="text-xl font-bold mb-4">Bulk Action</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Action
-                  </label>
-                  <select
-                    value={bulkAction}
-                    onChange={(e) => setBulkAction(e.target.value)}
-                    className="w-full p-2 border rounded"
-                  >
-                    <option value="">Select an action</option>
-                    <option value="delete">Delete Selected</option>
-                    <option value="activate">Activate Users</option>
-                    <option value="suspend">Suspend Users</option>
-                  </select>
-                </div>
-                <div className="text-sm text-gray-600">
-                  {selectedItems.length} item(s) selected
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <button
-                    onClick={() => {
-                      setShowBulkActionModal(false);
-                      setBulkAction("");
-                    }}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkAction}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Confirm
-                  </button>
-                </div>
+      {/* Create Post Modal */}
+{showCreateModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full">
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Create New Post</h2>
+          <button
+            onClick={() => setShowCreateModal(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Content */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Post Content
+            </label>
+            <textarea
+              value={newContent.content}
+              onChange={(e) =>
+                setNewContent({ ...newContent, content: e.target.value })
+              }
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
+              rows="5"
+              placeholder="What's on your mind?"
+            />
+          </div>
+
+          {/* Media Upload */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Media (optional)
+            </label>
+            <input
+              type="file"
+              accept="image/*,video/*"
+              onChange={handleCreateMediaUpload}
+              className="w-full text-sm text-gray-600"
+            />
+            {newContent.media_url && (
+              <div className="mt-3 relative">
+                {newContent.media_url.match(/^data:image/) ? (
+                  <img
+                    src={newContent.media_url}
+                    alt="Preview"
+                    className="max-w-full h-64 object-cover rounded-lg"
+                  />
+                ) : (
+                  <video
+                    src={newContent.media_url}
+                    controls
+                    className="max-w-full h-64 rounded-lg"
+                  />
+                )}
+                <button
+                  onClick={() =>
+                    setNewContent({ ...newContent, media_url: "" })
+                  }
+                  className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded-full hover:bg-opacity-70"
+                >
+                  ✕
+                </button>
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* Visibility */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Visibility
+            </label>
+            <select
+              value={newContent.visibility || "public"}
+              onChange={(e) =>
+                setNewContent({ ...newContent, visibility: e.target.value })
+              }
+              className="w-full p-2 border rounded"
+            >
+              <option value="public">🌍 Public</option>
+              <option value="friends">👥 Friends</option>
+              <option value="private">🔒 Private</option>
+            </select>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex justify-end space-x-2 pt-4">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateContent}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Create Post
+            </button>
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  </div>
+)}
+
+
 
       {/* Delete Content Modal */}
       {showDeleteModal && selectedContent && (
