@@ -1467,7 +1467,7 @@ const AdminPanel = () => {
               </div>
             )}
           </div>
-          <button
+          {/* <button
             onClick={() => {
               // Open create user modal
               alert("Create user functionality would open here");
@@ -1475,7 +1475,7 @@ const AdminPanel = () => {
             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
           >
             + Add User
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -1892,23 +1892,22 @@ const AdminPanel = () => {
               <div key={mediaItem._id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between">
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">{mediaItem.file_name || 'Media File'}</p>
-                    <p className="text-sm text-gray-500">{mediaItem.file_type} • {Math.round(mediaItem.file_size / 1024)}KB</p>
+                    <p className="text-sm text-gray-500">{mediaItem.content?.substring(0, 50) || 'Media File'}</p>
+                    <p className="text-sm text-gray-500">URL: {mediaItem.media_url ? mediaItem.media_url.substring(0, 50) : 'No file'}</p>
                   </div>
                   <div className="flex space-x-2 ml-4">
+                    {mediaItem.media_url && (
+                      <button
+                      onClick={() => window.open(mediaItem.media_url, '_blank')}
+                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                        View
+                      </button>
+                    )}
                     <button
-                      onClick={() => window.open(mediaItem.file_url, '_blank')}
-                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedContent({ id: mediaItem._id, type: "media" });
-                        setShowDeleteModal(true);
-                      }}
-                      className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                    >
+                    onClick={() => {
+                      setSelectedContent({ id: mediaItem._id, type: "media" });setShowDeleteModal(true);
+                    }}
+                    className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">
                       Delete
                     </button>
                   </div>

@@ -24,7 +24,7 @@ export async function get_post_by_id(req, res) {
     console.error("Error in get_post_by_id controller", error);
     res.status(500).json({ message: "Internal server error!" });
   }
-}
+}      
 
 
 export async function create_post(req,res){
