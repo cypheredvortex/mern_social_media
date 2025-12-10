@@ -1,4 +1,7 @@
 import Report from "../models/Report.js";
+import User from "../models/User.js";
+import Post from "../models/Post.js";
+import Comment from "../models/Comment.js";
 
 export async function list_report(req, res) {
   try {
@@ -12,11 +15,43 @@ export async function list_report(req, res) {
 
 export async function get_report_by_id(req, res) {
   try {
-    const report = await Report.findById(req.params.id).populate("reporter_id", "username email");
-    if (!report) {
-      return res.status(404).json({ message: "Report not found!" });
+    // Fetch the report and populate reporter
+    const report = await Report.findById(req.params.id)
+      .populate("reporter_id", "username email profile_id")
+      .lean();
+
+    if (!report) return res.status(404).json({ message: "Report not found!" });
+
+    // Populate the target based on type
+    let target = null;
+
+    switch (report.target_type) {
+      case "user":
+        target = await User.findById(report.target_id)
+          .select("username email profile_id role status")
+          .lean();
+        break;
+      case "post":
+        target = await Post.findById(report.target_id)
+          .populate("author_id", "username profile_id")
+          .lean();
+        break;
+      case "comment":
+        target = await Comment.findById(report.target_id)
+          .populate("author_id", "username profile_id")
+          .lean();
+        break;
+      case "media":
+        // Implement if you have Media model
+        break;
+      default:
+        target = { _id: report.target_id };
     }
-    res.status(200).json(report);
+
+    res.status(200).json({
+      ...report,
+      target,
+    });
   } catch (error) {
     console.error("Error in get_report_by_id controller", error);
     res.status(500).json({ message: "Internal server error!" });

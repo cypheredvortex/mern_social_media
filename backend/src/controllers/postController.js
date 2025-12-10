@@ -10,18 +10,22 @@ export async function list_post(req,res){
     }
 };
 
-export async function get_post_by_id(req,res){
-    try{
-        const post = await Post.find().populate('author_id', 'username email').sort({ createdAt: -1 });res.json(posts);
-        if(!post){
-            return res.status(404).json({message:"Post not found!"});
-        }
-        res.status(200).json(post);
-    }catch(error){
-        console.error("Error in get_post_by_id controller",error);
-        res.status(500).json({message:"Internal server error!"});
+export async function get_post_by_id(req, res) {
+  try {
+    const post = await Post.findById(req.params.id)
+      .populate("author_id", "username email profile_id"); // populate author details
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found!" });
     }
-};
+
+    res.status(200).json(post);
+  } catch (error) {
+    console.error("Error in get_post_by_id controller", error);
+    res.status(500).json({ message: "Internal server error!" });
+  }
+}
+
 
 export async function create_post(req,res){
     try{

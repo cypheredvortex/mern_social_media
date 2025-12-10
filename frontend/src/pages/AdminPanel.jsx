@@ -287,58 +287,61 @@ const AdminPanel = () => {
 
   // Enhanced Report Details Fetch
   const fetchReportDetails = async (reportId) => {
-    try {
-      setLoading(true);
-      
-      const reportRes = await api.get(`/reports/${reportId}`);
-      const report = reportRes.data;
+  try {
+    setLoading(true);
 
-      // Fetch all related data
-      const [reporterRes, targetRes, activitiesRes] = await Promise.all([
-        api.get(`/users/${report.reporter_id}`),
-        fetchTargetData(report.target_type, report.target_id),
-        api.get("/activity-logs").then(res => 
-          res.data.filter(activity => activity.target_id === reportId)
-        )
-      ]);
+    const reportRes = await api.get(`/reports/${reportId}`);
+    const report = reportRes.data;
 
-      setSelectedReport({
-        ...report,
-        reporter: reporterRes.data,
-        target: targetRes,
-        activities: activitiesRes
-      });
+    // Fetch target content
+    const targetRes = await fetchTargetData(report.target_type, report.target_id);
 
-      setShowReportModal(true);
-    } catch (error) {
-      console.error("Error fetching report details:", error);
-      alert("Error fetching report details");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Fetch activities related to this target
+    const activitiesRes = await api.get("/activity-logs");
+    const relatedActivities = activitiesRes.data.filter(
+      (activity) =>
+        activity.target_id &&
+        activity.target_id._id === report.target_id // if populated
+    );
+
+    setSelectedReport({
+      ...report,
+      target: targetRes,
+      activities: relatedActivities,
+    });
+
+    setShowReportModal(true);
+  } catch (error) {
+    console.error("Error fetching report details:", error);
+    alert("Error fetching report details");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Helper to fetch target data
   const fetchTargetData = async (type, id) => {
-    try {
-      if (type === "user") {
-        const res = await api.get(`/users/${id}`);
-        return { type: "user", data: res.data };
-      } else if (type === "post") {
-        const res = await api.get(`/posts/${id}`);
-        return { type: "post", data: res.data };
-      } else if (type === "comment") {
-        const res = await api.get(`/comments/${id}`);
-        return { type: "comment", data: res.data };
-      } else if (type === "media") {
-        const res = await api.get(`/media/${id}`);
-        return { type: "media", data: res.data };
-      }
-    } catch (error) {
-      console.error(`Error fetching ${type} data:`, error);
-      return { type, data: null };
+  try {
+    if (type === "user") {
+      const res = await api.get(`/users/${id}`);
+      return res.data;
+    } else if (type === "post") {
+      const res = await api.get(`/posts/${id}`);
+      return res.data;
+    } else if (type === "comment") {
+      const res = await api.get(`/comments/${id}`);
+      return res.data;
+    } else if (type === "media") {
+      const res = await api.get(`/media/${id}`);
+      return res.data;
     }
-  };
+    return null;
+  } catch (error) {
+    console.error(`Error fetching ${type} data:`, error);
+    return null;
+  }
+};
+
 
   // Filter Users
   const filterUsers = () => {
@@ -2624,6 +2627,64 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
+
+      {showReportModal && selectedReport && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-md">
+      <h2 className="text-xl font-bold mb-4">Report Details</h2>
+
+      <p><strong>Reporter:</strong> {selectedReport.reporter?.username || "Unknown"}</p>
+      <p><strong>Status:</strong> {selectedReport.status}</p>
+      <p><strong>Reason:</strong> {selectedReport.reason}</p>
+      <p><strong>Target Type:</strong> {selectedReport.target_type}</p>
+
+      {selectedReport.target && (
+  <div className="mt-4 p-2 border rounded bg-gray-50">
+    <h3 className="font-semibold">Target Details</h3>
+    {selectedReport.target_type === "user" && (
+      <>
+        <p><strong>Username:</strong> {selectedReport.target.username}</p>
+        <p><strong>Email:</strong> {selectedReport.target.email}</p>
+        <p><strong>Role:</strong> {selectedReport.target.role}</p>
+        <p><strong>Status:</strong> {selectedReport.target.status}</p>
+      </>
+    )}
+    {selectedReport.target_type === "post" && (
+      <>
+        <p><strong>Author:</strong> {selectedReport.target.author_id?.username}</p>
+        <p><strong>Content:</strong> {selectedReport.target.content}</p>
+        <p><strong>Media URL:</strong> {selectedReport.target.media_url}</p>
+        <p><strong>Visibility:</strong> {selectedReport.target.visibility}</p>
+      </>
+    )}
+    {selectedReport.target_type === "comment" && (
+      <>
+        <p><strong>Author:</strong> {selectedReport.target.author_id?.username}</p>
+        <p><strong>Content:</strong> {selectedReport.target.content}</p>
+      </>
+    )}
+    {selectedReport.target_type === "media" && (
+      <>
+        <p><strong>Uploader:</strong> {selectedReport.target.uploader_id?.username}</p>
+        <p><strong>URL:</strong> {selectedReport.target.url}</p>
+        <p><strong>Type:</strong> {selectedReport.target.type}</p>
+      </>
+    )}
+  </div>
+)}
+
+      <div className="mt-4 text-right">
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          onClick={() => setShowReportModal(false)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
     </div>
   );
