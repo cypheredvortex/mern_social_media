@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/axios";
 import { AuthContext } from "../context/AuthContext";
+import { render } from "@testing-library/react";
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -81,6 +82,7 @@ const AdminPanel = () => {
   const [showEditContentModal, setShowEditContentModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [showCreateNotificationModal, setShowCreateNotificationModal] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkActionModal, setShowBulkActionModal] = useState(false);
@@ -102,6 +104,14 @@ const AdminPanel = () => {
     author_id: "",
     category: ""
   });
+
+  const [newNotification, setNewNotification] = useState({
+  user_id: "",
+  type: "system",
+  sender_id: "",
+  target_id: "",
+});
+
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -1999,6 +2009,388 @@ const AdminPanel = () => {
     </div>
   );
 
+  const renderNotificationsTab = () => (
+  <div className="space-y-6">
+    {/* Header / Controls */}
+    <div className="bg-white p-4 rounded-lg shadow">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <h2 className="text-xl font-semibold">Notifications ({notifications.length})</h2>
+        {/* <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowCreateNotificationModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            + New Notification
+          </button>
+          <button
+            onClick={() => setNotifications([])}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          >
+            Clear All
+          </button>
+        </div> */}
+      </div>
+    </div>
+
+    {/* Notifications List */}
+    <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="divide-y">
+        {notifications.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">
+            No notifications found.
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <div
+              key={n._id}
+              className={`p-4 flex items-start justify-between hover:bg-gray-50 ${
+                !n.read ? "bg-blue-50" : ""
+              }`}
+            >
+              <div className="flex items-start space-x-3">
+                {/* Sender Avatar */}
+                {n.sender_id?.profile_picture ? (
+                  <img
+                    src={n.sender_id.profile_picture}
+                    alt={n.sender_id.username}
+                    className="w-10 h-10 rounded-full"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                    <span className="text-gray-600 font-medium">
+                      {n.sender_id?.username?.charAt(0).toUpperCase() || "?"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Notification Info */}
+                <div>
+                  <p className="text-gray-900 font-medium">
+                    {n.type.charAt(0).toUpperCase() + n.type.slice(1)}{" "}
+                    {n.read ? (
+                      <span className="text-xs text-gray-500 ml-2">(Read)</span>
+                    ) : (
+                      <span className="text-xs text-blue-500 ml-2">(Unread)</span>
+                    )}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {n.sender_id?.username
+                      ? `From ${n.sender_id.username}`
+                      : "System Notification"}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(n.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    setSelectedNotification(n);
+                    setShowNotificationModal(true);
+                  }}
+                  className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  View
+                </button>
+                <button
+                  onClick={() => updateNotification(n._id, { read: !n.read })}
+                  className={`px-3 py-1 text-sm rounded ${
+                    n.read
+                      ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {n.read ? "Mark Unread" : "Mark Read"}
+                </button>
+                <button
+                  onClick={() => deleteNotification(n._id)}
+                  className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+
+    {/* Create Notification Modal */}
+    {showCreateNotificationModal && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Create Notification</h2>
+              <button
+                onClick={() => setShowCreateNotificationModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* User ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target User ID
+                </label>
+                <input
+                  type="text"
+                  value={newNotification.user_id}
+                  onChange={(e) =>
+                    setNewNotification({
+                      ...newNotification,
+                      user_id: e.target.value,
+                    })
+                  }
+                  placeholder="Enter target user ID"
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notification Type
+                </label>
+                <select
+                  value={newNotification.type}
+                  onChange={(e) =>
+                    setNewNotification({
+                      ...newNotification,
+                      type: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="system">System</option>
+                  <option value="warning">Warning</option>
+                  <option value="like">Like</option>
+                  <option value="comment">Comment</option>
+                  <option value="follow">Follow</option>
+                  <option value="message">Message</option>
+                  <option value="mention">Mention</option>
+                </select>
+              </div>
+
+              {/* Sender ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sender ID (optional)
+                </label>
+                <input
+                  type="text"
+                  value={newNotification.sender_id}
+                  onChange={(e) =>
+                    setNewNotification({
+                      ...newNotification,
+                      sender_id: e.target.value,
+                    })
+                  }
+                  placeholder="Enter sender ID"
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              {/* Target ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target ID (optional)
+                </label>
+                <input
+                  type="text"
+                  value={newNotification.target_id}
+                  onChange={(e) =>
+                    setNewNotification({
+                      ...newNotification,
+                      target_id: e.target.value,
+                    })
+                  }
+                  placeholder="Enter target object ID"
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  onClick={() => setShowCreateNotificationModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await createNotification({
+                        user_id: newNotification.user_id,
+                        type: newNotification.type,
+                        sender_id: newNotification.sender_id || null,
+                        target_id: newNotification.target_id || null,
+                        read: false,
+                      });
+                      setShowCreateNotificationModal(false);
+                      setNewNotification({
+                        user_id: "",
+                        type: "system",
+                        sender_id: "",
+                        target_id: "",
+                      });
+                      alert("Notification created successfully!");
+                    } catch (err) {
+                      alert("Failed to create notification.");
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Notification Details Modal */}
+    {showNotificationModal && selectedNotification && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div className="bg-white rounded-lg shadow-lg w-full max-w-lg relative">
+          <div className="flex justify-between items-center border-b p-4">
+            <h2 className="text-xl font-bold text-gray-800">Notification Details</h2>
+            <button
+              onClick={() => setShowNotificationModal(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500">Type</h3>
+              <p className="text-gray-800 capitalize mt-1">
+                {selectedNotification.type}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-500">Status</h3>
+              <p
+                className={`mt-1 inline-flex items-center px-2 py-1 rounded text-sm ${
+                  selectedNotification.read
+                    ? "bg-green-100 text-green-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}
+              >
+                {selectedNotification.read ? "Read" : "Unread"}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-500">Target User</h3>
+              <p className="text-gray-800 break-all mt-1">
+                {selectedNotification.user_id?._id ||
+                  selectedNotification.user_id ||
+                  "N/A"}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-500">Sender</h3>
+              {selectedNotification.sender_id ? (
+                <div className="flex items-center mt-2 space-x-3">
+                  {selectedNotification.sender_id.profile_picture ? (
+                    <img
+                      src={selectedNotification.sender_id.profile_picture}
+                      alt={selectedNotification.sender_id.username}
+                      className="w-10 h-10 rounded-full"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                      <span className="text-gray-600 font-medium">
+                        {selectedNotification.sender_id.username
+                          ?.charAt(0)
+                          .toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-800">
+                      {selectedNotification.sender_id.username}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      ID: {selectedNotification.sender_id._id}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-800 mt-1">System Notification</p>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-500">Target Object ID</h3>
+              <p className="text-gray-800 break-all mt-1">
+                {selectedNotification.target_id || "N/A"}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-500">Created At</h3>
+              <p className="text-gray-800 mt-1">
+                {new Date(selectedNotification.createdAt).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end items-center gap-3 border-t p-4">
+            <button
+              onClick={() =>
+                updateNotification(selectedNotification._id, {
+                  read: !selectedNotification.read,
+                })
+              }
+              className={`px-4 py-2 rounded ${
+                selectedNotification.read
+                  ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                  : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+              }`}
+            >
+              {selectedNotification.read ? "Mark as Unread" : "Mark as Read"}
+            </button>
+
+            <button
+              onClick={() => {
+                if (window.confirm("Delete this notification?")) {
+                  deleteNotification(selectedNotification._id);
+                  setShowNotificationModal(false);
+                }
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Delete
+            </button>
+
+            <button
+              onClick={() => setShowNotificationModal(false)}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -2024,7 +2416,7 @@ const AdminPanel = () => {
         {/* Tabs */}
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="flex border-b">
-            {["dashboard", "users", "reports", "content", "activity"].map((tab) => (
+            {["dashboard", "users", "reports", "content", "activity", "notifications"].map((tab) => (
               <button
                 key={tab}
                 className={`px-6 py-3 font-medium capitalize ${
@@ -2057,6 +2449,7 @@ const AdminPanel = () => {
           {activeTab === "reports" && renderReportsTab()}
           {activeTab === "content" && renderContentTab()}
           {activeTab === "activity" && renderActivityTab()}
+          {activeTab === "notifications" && renderNotificationsTab()}
         </div>
       </div>
 
@@ -2760,6 +3153,151 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
+
+      {/* Notification Details Modal */}
+{showNotificationModal && selectedNotification && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="bg-white rounded-lg shadow-lg w-full max-w-lg relative">
+      {/* Header */}
+      <div className="flex justify-between items-center border-b p-4">
+        <h2 className="text-xl font-bold text-gray-800">Notification Details</h2>
+        <button
+          onClick={() => setShowNotificationModal(false)}
+          className="text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="p-6 space-y-4">
+        {/* Notification Type */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">Type</h3>
+          <p className="text-gray-800 capitalize mt-1">
+            {selectedNotification.type}
+          </p>
+        </div>
+
+        {/* Read Status */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">Status</h3>
+          <p
+            className={`mt-1 inline-flex items-center px-2 py-1 rounded text-sm ${
+              selectedNotification.read
+                ? "bg-green-100 text-green-700"
+                : "bg-yellow-100 text-yellow-700"
+            }`}
+          >
+            {selectedNotification.read ? "Read" : "Unread"}
+          </p>
+        </div>
+
+        {/* User ID */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">Target User</h3>
+          <p className="text-gray-800 break-all mt-1">
+            {selectedNotification.user_id?._id ||
+              selectedNotification.user_id ||
+              "N/A"}
+          </p>
+        </div>
+
+        {/* Sender */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">Sender</h3>
+          {selectedNotification.sender_id ? (
+            <div className="flex items-center mt-2 space-x-3">
+              {selectedNotification.sender_id.profile_picture ? (
+                <img
+                  src={selectedNotification.sender_id.profile_picture}
+                  alt={selectedNotification.sender_id.username}
+                  className="w-10 h-10 rounded-full"
+                />
+              ) : (
+                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                  <span className="text-gray-600 font-medium">
+                    {selectedNotification.sender_id.username
+                      ?.charAt(0)
+                      .toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <div>
+                <p className="font-medium text-gray-800">
+                  {selectedNotification.sender_id.username}
+                </p>
+                <p className="text-sm text-gray-500">
+                  ID: {selectedNotification.sender_id._id}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-800 mt-1">System Notification</p>
+          )}
+        </div>
+
+        {/* Target ID */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">Target Object ID</h3>
+          <p className="text-gray-800 break-all mt-1">
+            {selectedNotification.target_id || "N/A"}
+          </p>
+        </div>
+
+        {/* Created At */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">Created At</h3>
+          <p className="text-gray-800 mt-1">
+            {new Date(selectedNotification.createdAt).toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      {/* Footer Buttons */}
+      <div className="flex justify-end items-center gap-3 border-t p-4">
+        {/* Mark Read / Unread */}
+        <button
+          onClick={() =>
+            updateNotification(selectedNotification._id, {
+              read: !selectedNotification.read,
+            })
+          }
+          className={`px-4 py-2 rounded ${
+            selectedNotification.read
+              ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+              : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+          }`}
+        >
+          {selectedNotification.read ? "Mark as Unread" : "Mark as Read"}
+        </button>
+
+        {/* Delete */}
+        <button
+          onClick={() => {
+            if (window.confirm("Delete this notification?")) {
+              deleteNotification(selectedNotification._id);
+              setShowNotificationModal(false);
+            }
+          }}
+          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+        >
+          Delete
+        </button>
+
+        {/* Close */}
+        <button
+          onClick={() => setShowNotificationModal(false)}
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
     </div>
   );
 };
