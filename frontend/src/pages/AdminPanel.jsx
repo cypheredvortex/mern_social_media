@@ -96,6 +96,10 @@ const AdminPanel = () => {
   const [selectedItems, setSelectedItems] = useState([]);
   const [bulkAction, setBulkAction] = useState("");
 
+  // Search States
+  const [searchTerm, setSearchTerm] = useState("");
+
+
   // New Content Creation
   const [newContent, setNewContent] = useState({
     type: "post",
@@ -1830,6 +1834,31 @@ const AdminPanel = () => {
         </div>
       </div>
 
+      {/* Search Bar for Posts and Comments */}
+{(selectedContentType === "post" || selectedContentType === "comment") && (
+  <div className="bg-white p-4 rounded-lg shadow flex items-center justify-between">
+    <input
+      type="text"
+      placeholder={
+        selectedContentType === "post"
+          ? "Search posts by content or author..."
+          : "Search comments by content or author..."
+      }
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      className="w-full md:w-1/2 p-2 border rounded focus:ring-2 focus:ring-blue-500"
+    />
+    <button
+      onClick={() => setSearchTerm("")}
+      className="ml-2 text-gray-500 hover:text-gray-700"
+    >
+      ✕
+    </button>
+  </div>
+)}
+
+
+
       {/* Content List */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-4 border-b">
@@ -1841,7 +1870,14 @@ const AdminPanel = () => {
         </div>
         <div className="divide-y">
           {selectedContentType === "post" ? (
-            posts.map((post) => {
+            posts.filter((post) => {
+    const author = users.find((u) => u._id === post.author_id);
+    const authorName = author?.username?.toLowerCase() || "";
+    return (
+      post.content?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      authorName.includes(searchTerm.toLowerCase())
+    );
+  }).map((post) => {
               const author = users.find(u => u._id === post.author_id);
               
               return (
@@ -1884,7 +1920,14 @@ const AdminPanel = () => {
               );
             })
           ) : selectedContentType === "comment" ? (
-            comments.map((comment) => (
+            comments.filter((comment) => {
+    const author = users.find((u) => u._id === comment.author_id);
+    const authorName = author?.username?.toLowerCase() || "";
+    return (
+      comment.content?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      authorName.includes(searchTerm.toLowerCase())
+    );
+  }).map((comment) => (
               <div key={comment._id} className="p-4 hover:bg-gray-50">
                 <div className="flex justify-between">
                   <div className="flex-1">
@@ -2799,80 +2842,6 @@ const AdminPanel = () => {
         </div>
       )}
 
-      {/* Create Content Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Create New Content</h2>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Content Type
-                  </label>
-                  <select
-                    value={newContent.type}
-                    onChange={(e) => setNewContent({...newContent, type: e.target.value})}
-                    className="w-full p-2 border rounded"
-                  >
-                    <option value="post">Post</option>
-                    <option value="comment">Comment</option>
-                  </select>
-                </div>
-                {newContent.type === "post" && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Title
-                    </label>
-                    <input
-                      type="text"
-                      value={newContent.title}
-                      onChange={(e) => setNewContent({...newContent, title: e.target.value})}
-                      className="w-full p-2 border rounded"
-                      placeholder="Enter post title..."
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Content
-                  </label>
-                  <textarea
-                    value={newContent.content}
-                    onChange={(e) => setNewContent({...newContent, content: e.target.value})}
-                    className="w-full p-2 border rounded"
-                    rows="6"
-                    placeholder="Enter content..."
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <button
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateContent}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    Create
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Create Post Modal */}
 {showCreateModal && (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -2981,8 +2950,6 @@ const AdminPanel = () => {
     </div>
   </div>
 )}
-
-
 
       {/* Delete Content Modal */}
       {showDeleteModal && selectedContent && (
